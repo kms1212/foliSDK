@@ -1,0 +1,11 @@
+[submodule "libfolistdc"]
+	path = libfolistdc
+	url = https://github.com/kms1212/libfolistdc
+[submodule "gcc-strata"]
+	path = gcc-strata
+	url = https://github.com/kms1212/gcc-strata
+	branch = strata-folios-releases/gcc-15.2.0
+[submodule "binutils-strata"]
+	path = binutils-strata
+	url = https://github.com/kms1212/binutils-strata
+	branch = strata-releases/binutils-2_45_1
