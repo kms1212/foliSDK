@@ -1,6 +1,3 @@
-[submodule "libfolistdc"]
-	path = libfolistdc
-	url = https://github.com/kms1212/libfolistdc
 [submodule "gcc-strata"]
 	path = gcc-strata
 	url = https://github.com/kms1212/gcc-strata
@@ -9,3 +6,6 @@
 	path = binutils-strata
 	url = https://github.com/kms1212/binutils-strata
 	branch = strata-releases/binutils-2_45_1
+[submodule "musl-strata"]
+	path = musl-strata
+	url = git://git.musl-libc.org/musl
