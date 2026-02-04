@@ -1,10 +1,11 @@
 class Folisdk < Formula
-  desc "Cross-compiler toolchain for Strata OS"
+  desc "Cross-compiler toolchain for foliOS"
   homepage "https://github.com/kms1212/folisdk"
   
-  url "file://#{Dir.pwd}/folisdk-1.0.0.tar.gz"
+  url "file://#{Dir.pwd}/build/folisdk-0.0.1.tar.gz"
   
-  version "1.0.0"
+  version "0.0.1"
+  sha256 "a9db594d4edb7ff75545c1dfb600e5648ae1b673217d40bec07b389ea7de63cb"
   
   keg_only "it conflicts with standard gdb and binutils"
 
@@ -14,11 +15,11 @@ class Folisdk < Formula
 
   def caveats
     <<~EOS
-      To use the Folio OS toolchain, you need to add it to your PATH:
-
-        export PATH="#{opt_bin}:$PATH"
-
-      You can add this line to your ~/.zshrc or ~/.bash_profile.
+      Installed:
+      - gcc (C, C++)
+      - binutils
+      - gdb
+      - musl libc
     EOS
   end
 end

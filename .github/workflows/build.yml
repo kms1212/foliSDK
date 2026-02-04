@@ -1,0 +1,75 @@
+name: Build foliSDK Toolchain
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive 
+
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          bison \
+          flex \
+          texinfo \
+          wget \
+          tar
+
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install texinfo wget gnu-getopt
+        echo "$(brew --prefix texinfo)/bin" >> $GITHUB_PATH
+
+    - name: Setup Prerequisites
+      run: |
+        chmod +x setup_prerequisites.sh
+        ./setup_prerequisites.sh
+
+    - name: Run Build Script
+      run: |
+        chmod +x build.sh
+        ./build.sh
+
+    - name: Calculate SHA256 Checksum
+      id: checksum
+      run: |
+        FILE_PATH=$(find build -name "folisdk-*.tar.gz" | head -n 1)
+        echo "Found artifact: $FILE_PATH"
+        
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          shasum -a 256 "$FILE_PATH" > "$FILE_PATH.sha256"
+        else
+          sha256sum "$FILE_PATH" > "$FILE_PATH.sha256"
+        fi
+        
+        echo "::notice title=SHA256 Checksum::$(cat "$FILE_PATH.sha256")"
+        cat "$FILE_PATH.sha256"
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: folisdk-${{ runner.os }}-${{ github.run_id }}
+        path: |
+          build/folisdk-*.tar.gz
+          build/*.sha256
+        retention-days: 5
