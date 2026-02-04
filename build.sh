@@ -97,6 +97,10 @@ unset C_INCLUDE_PATH
 unset CPLUS_INCLUDE_PATH
 unset LIBRARY_PATH
 
+if [ "$OSNAME" == "Darwin" ]; then
+    export MAKEINFO=/opt/homebrew/bin/makeinfo
+fi
+
 export CPPFLAGS="-I$BUILDDIR/$PREFIX/include"
 export LDFLAGS="-L$BUILDDIR/$PREFIX/lib"
 
@@ -186,10 +190,6 @@ configure_gcc_pass1() {
 }
 
 make_gcc_pass1() {
-    local GCC_LIB_PATH
-    local GCC_INTERNAL_HEADERS_PATH
-    local GCC_INTERNAL_FIXED_HEADERS_PATH
-
     cd build/gcc-pass1
 
     make -j"$PARALLEL" all-gcc
@@ -197,17 +197,9 @@ make_gcc_pass1() {
     make install-gcc DESTDIR="$BUILDDIR"
     make install-target-libgcc DESTDIR="$BUILDDIR"
 
-    GCC_LIB_PATH=$("$BUILDDIR/$PREFIX/bin/$TARGET-gcc" -print-libgcc-file-name | xargs dirname)
-    GCC_INTERNAL_HEADERS_PATH="$GCC_LIB_PATH/include"
-    GCC_INTERNAL_FIXED_HEADERS_PATH="$GCC_LIB_PATH/include-fixed"
+    GCC_BUILTIN_INCLUDE_PATH=$("$BUILDDIR/$PREFIX/bin/$TARGET-gcc" -print-file-name=include)
 
-    mkdir -p "$BUILDDIR/$SYSROOT/usr/include"
-
-    cp -r "$GCC_INTERNAL_HEADERS_PATH"/* "$BUILDDIR/$SYSROOT/usr/include"
-    if [ -d "$GCC_INTERNAL_FIXED_HEADERS_PATH" ]; then
-        cp -r "$GCC_INTERNAL_FIXED_HEADERS_PATH"/* "$BUILDDIR/$SYSROOT/usr/include"
-    fi
-    cp -r "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$BUILDDIR/$SYSROOT/usr/include/stdint.h"
+    cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
 
     cd ../..
 }
@@ -329,104 +321,104 @@ make_archive() {
     cd "$ROOT"
 }
 
-if [ ! -f "build/.configure-zlib.stamp" ] || [ "$1" == "cfg-zlib" ]; then
-    if [ "$1" == "cfg-zlib" ]; then
+if [ ! -f "build/.configure-zlib.stamp" ] || [ "${1:-}" == "cfg-zlib" ]; then
+    if [ "${1:-}" == "cfg-zlib" ]; then
         shift
     fi
     configure_zlib
     touch "build/.configure-zlib.stamp"
 fi
 
-if [ ! -f "build/.zlib.stamp" ] || [ "$1" == "make-zlib" ]; then
-    if [ "$1" == "make-zlib" ]; then
+if [ ! -f "build/.zlib.stamp" ] || [ "${1:-}" == "make-zlib" ]; then
+    if [ "${1:-}" == "make-zlib" ]; then
         shift
     fi
     make_zlib
     touch "build/.zlib.stamp"
 fi
 
-if [ ! -f "build/.configure-binutils.stamp" ] || [ "$1" == "cfg-binutils" ]; then
-    if [ "$1" == "cfg-binutils" ]; then
+if [ ! -f "build/.configure-binutils.stamp" ] || [ "${1:-}" == "cfg-binutils" ]; then
+    if [ "${1:-}" == "cfg-binutils" ]; then
         shift
     fi
     configure_binutils
     touch "build/.configure-binutils.stamp"
 fi
 
-if [ ! -f "build/.binutils.stamp" ] || [ "$1" == "make-binutils" ]; then
-    if [ "$1" == "make-binutils" ]; then
+if [ ! -f "build/.binutils.stamp" ] || [ "${1:-}" == "make-binutils" ]; then
+    if [ "${1:-}" == "make-binutils" ]; then
         shift
     fi
     make_binutils
     touch "build/.binutils.stamp"
 fi
 
-if [ ! -f "build/.configure-gcc-pass1.stamp" ] || [ "$1" == "cfg-gcc-pass1" ]; then
-    if [ "$1" == "cfg-gcc-pass1" ]; then
+if [ ! -f "build/.configure-gcc-pass1.stamp" ] || [ "${1:-}" == "cfg-gcc-pass1" ]; then
+    if [ "${1:-}" == "cfg-gcc-pass1" ]; then
         shift
     fi
     configure_gcc_pass1
     touch "build/.configure-gcc-pass1.stamp"
 fi
 
-if [ ! -f "build/.gcc-pass1.stamp" ] || [ "$1" == "make-gcc-pass1" ]; then
-    if [ "$1" == "make-gcc-pass1" ]; then
+if [ ! -f "build/.gcc-pass1.stamp" ] || [ "${1:-}" == "make-gcc-pass1" ]; then
+    if [ "${1:-}" == "make-gcc-pass1" ]; then
         shift
     fi
     make_gcc_pass1
     touch "build/.gcc-pass1.stamp"
 fi
 
-if [ ! -f "build/.configure-musl-pass1.stamp" ] || [ "$1" == "cfg-musl-pass1" ]; then
-    if [ "$1" == "cfg-musl-pass1" ]; then
+if [ ! -f "build/.configure-musl-pass1.stamp" ] || [ "${1:-}" == "cfg-musl-pass1" ]; then
+    if [ "${1:-}" == "cfg-musl-pass1" ]; then
         shift
     fi
     configure_musl_pass1
     touch "build/.configure-musl-pass1.stamp"
 fi
 
-if [ ! -f "build/.musl-pass1.stamp" ] || [ "$1" == "make-musl-pass1" ]; then
-    if [ "$1" == "make-musl-pass1" ]; then
+if [ ! -f "build/.musl-pass1.stamp" ] || [ "${1:-}" == "make-musl-pass1" ]; then
+    if [ "${1:-}" == "make-musl-pass1" ]; then
         shift
     fi
     make_musl_pass1
     touch "build/.musl-pass1.stamp"
 fi
 
-if [ ! -f "build/.configure-gcc-pass2.stamp" ] || [ "$1" == "cfg-gcc-pass2" ]; then
-    if [ "$1" == "cfg-gcc-pass2" ]; then
+if [ ! -f "build/.configure-gcc-pass2.stamp" ] || [ "${1:-}" == "cfg-gcc-pass2" ]; then
+    if [ "${1:-}" == "cfg-gcc-pass2" ]; then
         shift
     fi
     configure_gcc_pass2
     touch "build/.configure-gcc-pass2.stamp"
 fi
 
-if [ ! -f "build/.gcc-pass2.stamp" ] || [ "$1" == "make-gcc-pass2" ]; then
-    if [ "$1" == "make-gcc-pass2" ]; then
+if [ ! -f "build/.gcc-pass2.stamp" ] || [ "${1:-}" == "make-gcc-pass2" ]; then
+    if [ "${1:-}" == "make-gcc-pass2" ]; then
         shift
     fi
     make_gcc_pass2
     touch "build/.gcc-pass2.stamp"
 fi
 
-if [ ! -f "build/.configure-musl-pass2.stamp" ] || [ "$1" == "cfg-musl-pass2" ]; then
-    if [ "$1" == "cfg-musl-pass2" ]; then
+if [ ! -f "build/.configure-musl-pass2.stamp" ] || [ "${1:-}" == "cfg-musl-pass2" ]; then
+    if [ "${1:-}" == "cfg-musl-pass2" ]; then
         shift
     fi
     configure_musl_pass2
     touch "build/.configure-musl-pass2.stamp"
 fi
 
-if [ ! -f "build/.musl-pass2.stamp" ] || [ "$1" == "make-musl-pass2" ]; then
-    if [ "$1" == "make-musl-pass2" ]; then
+if [ ! -f "build/.musl-pass2.stamp" ] || [ "${1:-}" == "make-musl-pass2" ]; then
+    if [ "${1:-}" == "make-musl-pass2" ]; then
         shift
     fi
     make_musl_pass2
     touch "build/.musl-pass2.stamp"
 fi
 
-if [ ! -f "build/.archive.stamp" ] || [ "$1" == "make-archive" ]; then
-    if [ "$1" == "make-archive" ]; then
+if [ ! -f "build/.archive.stamp" ] || [ "${1:-}" == "make-archive" ]; then
+    if [ "${1:-}" == "make-archive" ]; then
         shift
     fi
     make_archive
