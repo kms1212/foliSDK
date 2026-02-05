@@ -107,6 +107,20 @@ export LDFLAGS="-L$BUILDDIR/$PREFIX/lib"
 mkdir -p "$BUILDDIR"
 mkdir -p "$BUILDDIR/$SYSROOT"
 
+start_section() {
+    if [ "${GITHUB_ACTIONS:-false}" == "true" ]; then
+        echo "::group::$1"
+    else
+        echo "=== $1 ==="
+    fi
+}
+
+end_section() {
+    if [ "${GITHUB_ACTIONS:-false}" == "true" ]; then
+        echo "::endgroup::"
+    fi
+}
+
 configure_zlib() {
     cd build
 
@@ -120,7 +134,9 @@ configure_zlib() {
 
     cd zlib
 
+    start_section "Configure zlib"
     ./configure --prefix="$PREFIX" --static
+    end_section
 
     cd ../..
 }
@@ -128,8 +144,13 @@ configure_zlib() {
 make_zlib() {
     cd build/zlib
 
+    start_section "Make zlib"
     make -j"$PARALLEL"
+    end_section
+
+    start_section "Install zlib"
     make install DESTDIR="$BUILDDIR"
+    end_section
 
     cd ../..
 }
@@ -140,6 +161,8 @@ configure_binutils() {
     mkdir -p binutils
     cd binutils
 
+    start_section "Configure binutils"
+    LDFLAGS="-s" \
     ../../binutils-strata/configure \
         --target="$TARGET" \
         --prefix="$PREFIX" \
@@ -149,6 +172,7 @@ configure_binutils() {
         --disable-werror \
         --enable-static \
         --with-system-zlib
+    end_section
 
     cd ../..
 }
@@ -156,8 +180,13 @@ configure_binutils() {
 make_binutils() {
     cd build/binutils
 
+    start_section "Make binutils"
     make -j"$PARALLEL"
+    end_section
+
+    start_section "Install binutils"
     make install DESTDIR="$BUILDDIR"
+    end_section
 
     cd ../..
 }
@@ -168,6 +197,8 @@ configure_gcc_pass1() {
     mkdir -p gcc-pass1
     cd gcc-pass1
 
+    start_section "Configure GCC (pass1)"
+    LDFLAGS="-s" \
     ../../gcc-strata/configure \
         --target="$TARGET" \
         --prefix="$PREFIX" \
@@ -185,6 +216,7 @@ configure_gcc_pass1() {
         --disable-libquadmath \
         --disable-libatomic \
         --disable-lto
+    end_section
 
     cd ../..
 }
@@ -192,14 +224,21 @@ configure_gcc_pass1() {
 make_gcc_pass1() {
     cd build/gcc-pass1
 
+    start_section "Make GCC (pass1)"
     make -j"$PARALLEL" all-gcc
+    end_section
+
+    start_section "Make GCC (pass1) - libgcc"
     make -j"$PARALLEL" all-target-libgcc
+    end_section
+
+    start_section "Install GCC (pass1)"
     make install-gcc DESTDIR="$BUILDDIR"
+    end_section
+
+    start_section "Install GCC (pass1) - libgcc"
     make install-target-libgcc DESTDIR="$BUILDDIR"
-
-    GCC_BUILTIN_INCLUDE_PATH=$("$BUILDDIR/$PREFIX/bin/$TARGET-gcc" -print-file-name=include)
-
-    cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
+    end_section
 
     cd ../..
 }
@@ -210,12 +249,14 @@ configure_musl_pass1() {
     mkdir -p musl-pass1
     cd musl-pass1
 
+    start_section "Configure musl libc (pass1)"
     CROSS_COMPILE="$TARGET-" \
     ../../musl-strata/configure \
         --target="$TARGET" \
         --prefix="$SYSROOT/usr" \
         --disable-shared \
         --disable-gcc-wrapper
+    end_section
 
     cd ../..
 }
@@ -223,11 +264,17 @@ configure_musl_pass1() {
 make_musl_pass1() {
     cd build/musl-pass1
 
+    start_section "Install musl libc (pass1) - headers"
     make install-headers
+    end_section
 
+    start_section "Make musl libc (pass1)"
     make -j"$PARALLEL"
+    end_section
 
+    start_section "Install musl libc (pass1)"
     make install DESTDIR="$BUILDDIR"
+    end_section
 
     ln -s crt1.o "$BUILDDIR/$SYSROOT/usr/lib/crt0.o"
 
@@ -242,6 +289,8 @@ configure_gcc_pass2() {
     mkdir -p gcc-pass2
     cd gcc-pass2
 
+    start_section "Configure GCC (pass2)"
+    LDFLAGS="-s" \
     ../../gcc-strata/configure \
         --target="$TARGET" \
         --prefix="$PREFIX" \
@@ -261,6 +310,7 @@ configure_gcc_pass2() {
         --enable-libssp \
         --enable-libatomic \
         --enable-libquadmath
+    end_section
     
     cd ../..
 }
@@ -268,14 +318,33 @@ configure_gcc_pass2() {
 make_gcc_pass2() {
     cd build/gcc-pass2
 
+    start_section "Make GCC (pass2)"
     make -j"$PARALLEL" all-gcc
-    make -j"$PARALLEL" all-target-libgcc
-    make install-gcc DESTDIR="$BUILDDIR"
-    make install-target-libgcc DESTDIR="$BUILDDIR"
+    end_section
 
+    start_section "Make GCC (pass2) - libgcc"
+    make -j"$PARALLEL" all-target-libgcc
+    end_section
+
+    start_section "Install GCC (pass2)"
+    make install-gcc DESTDIR="$BUILDDIR"
+    end_section
+
+    start_section "Install GCC (pass2) - libgcc"
+    make install-target-libgcc DESTDIR="$BUILDDIR"
+    end_section
+
+    start_section "Make GCC (pass2) - libstdc++"
     make -j"$PARALLEL" all-target-libstdc++-v3
+    end_section
+
+    start_section "Install GCC (pass2) - libstdc++"
     make install-target-libstdc++-v3 DESTDIR="$BUILDDIR"
+    end_section
     
+    GCC_BUILTIN_INCLUDE_PATH=$("$BUILDDIR/$PREFIX/bin/$TARGET-gcc" -print-file-name=include)
+    cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
+
     cd ../..
 }
 
@@ -286,11 +355,13 @@ configure_musl_pass2() {
     mkdir -p musl-pass2
     cd musl-pass2
 
+    start_section "Configure musl libc (pass2)"
     CROSS_COMPILE="$TARGET-" \
     ../../musl-strata/configure \
         --target="$TARGET" \
         --prefix="$SYSROOT/usr" \
         --disable-gcc-wrapper
+    end_section
 
     cd ../..
 }
@@ -298,11 +369,17 @@ configure_musl_pass2() {
 make_musl_pass2() {
     cd build/musl-pass2
 
+    start_section "Install musl libc (pass2) - headers"
     make install-headers
+    end_section
 
+    start_section "Make musl libc (pass2)"
     make -j"$PARALLEL"
+    end_section
 
+    start_section "Install musl libc (pass2)"
     make install DESTDIR="$BUILDDIR"
+    end_section
 
     rm -f "$BUILDDIR/lib/ld-musl-x86_64.so.1"
     rmdir "$BUILDDIR/lib" || true
@@ -316,7 +393,10 @@ make_archive() {
     cd build
 
     cd "$BUILDDIR/$PREFIX"
+
+    start_section "Make archive"
     tar -czvf "$ROOT/build/$ARCHIVE_NAME" .
+    end_section
 
     cd "$ROOT"
 }
