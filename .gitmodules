@@ -6,3 +6,7 @@
 	path = binutils-strata
 	url = https://github.com/kms1212/binutils-strata
 	branch = strata-releases/binutils-2_45_1
+[submodule "musl-strata"]
+	path = musl-strata
+	url = https://github.com/kms1212/musl-strata
+	branch = v1.2.5/strata-folios-support
