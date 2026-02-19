@@ -94,10 +94,11 @@ fi
 
 if [ -z "$PARALLEL" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
-        PARALLEL=$(($(sysctl -n hw.ncpu) - 1))
+        PROCCOUNT=$(sysctl -n hw.ncpu)
     else
-        PARALLEL=$(($(nproc) - 1))
+        PROCCOUNT=$(nproc)
     fi
+    PARALLEL=$((PROCCOUNT > 1 ? PROCCOUNT - 1 : 1))
 fi
 
 
@@ -383,6 +384,8 @@ fi
 
 HOST_TIC="$BUILDDIR/ncurses/progs/tic"
 
+ROOT_CPPFLAGS="$CPPFLAGS"
+ROOT_LDFLAGS="$LDFLAGS"
 for ARCH in "${ARCHS[@]}"; do
     # Per-Target Build Settings
     TARGET="$ARCH-strata-folios"
@@ -390,8 +393,8 @@ for ARCH in "${ARCHS[@]}"; do
 
     mkdir -p "$PKGBUILDDIR/$SYSROOT"
 
-    export CPPFLAGS="-I$PKGBUILDDIR/$SYSROOT/include $CPPFLAGS"
-    export LDFLAGS="-L$PKGBUILDDIR/$SYSROOT/lib $LDFLAGS"
+    export CPPFLAGS="-I$PKGBUILDDIR/$SYSROOT/include $ROOT_CPPFLAGS"
+    export LDFLAGS="-L$PKGBUILDDIR/$SYSROOT/lib $ROOT_LDFLAGS"
     export PKG_CONFIG_PATH=""
     export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
     export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
@@ -1143,10 +1146,11 @@ for ARCH in "${ARCHS[@]}"; do
             NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
             LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
             RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib" \
-            CPPFLAGS="$CPPFLAGS -fPIC"  # TODO: remove -fPIC \
+            CPPFLAGS="$CPPFLAGS -fPIC" \
+            LDFLAGS="$LDFLAGS -shared" \
             ZSTD_LIB_ZLIB=1 \
             ZSTD_LIB_LZMA=1 \
-            ZSTD_LIB_LZ4=1 \
+            ZSTD_LIB_LZ4=1
         end_section
 
         start_section "Install zstd"
