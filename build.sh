@@ -144,8 +144,8 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     cd "$BUILDDIR"
 
     curl -ZL -C - \
-        -o "gmp-$GMP_VERSION.tar.gz" "$GMP_URL" \
-        -o "mpfr-$MPFR_VERSION.tar.gz" "$MPFR_URL" \
+        -o "gmp-$GMP_VERSION.tar.xz" "$GMP_URL" \
+        -o "mpfr-$MPFR_VERSION.tar.xz" "$MPFR_URL" \
         -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
         -o "nettle-$NETTLE_VERSION.tar.gz" "$NETTLE_URL" \
         -o "libsodium-$LIBSODIUM_VERSION.tar.gz" "$LIBSODIUM_URL" \
