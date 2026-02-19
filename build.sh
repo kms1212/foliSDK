@@ -785,7 +785,7 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libffi"
         ../libffi-src/configure \
-            --with-sysroot="$PKGBUILDDIR/ㅍ$SYSROOT" \
+            --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --host="$TARGET" \
             --prefix="/usr" \
             --enable-shared \
