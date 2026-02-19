@@ -11,9 +11,11 @@ ROOT="$PWD"
 if [ "$OSNAME" == "Darwin" ]; then
     GETOPT="/opt/homebrew/opt/gnu-getopt/bin/getopt"
     TCLSH="/opt/homebrew/opt/tcl-tk/bin/tclsh"
+    SED_TYPE="bsd"
 else
     GETOPT="getopt"
     TCLSH="tclsh"
+    SED_TYPE="gnu"
 fi
 CMAKE="$(which cmake)"
 
@@ -275,9 +277,15 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     tar -xf "libarchive-$LIBARCHIVE_VERSION.tar.gz"
     mv "libarchive-$LIBARCHIVE_VERSION" libarchive-src
     cp -f ../gcc-strata/config.sub libarchive-src/build/autoconf  # config.sub patch
-    sed -i '' \
-        's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
-        "libarchive-src/libarchive/archive_hmac.c"
+    if [ $SED_TYPE == "bsd" ]; then
+        sed -i '' \
+            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
+            "libarchive-src/libarchive/archive_hmac.c"
+    else
+        sed -i \
+            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
+            "libarchive-src/libarchive/archive_hmac.c"
+    fi
 
     # libiconv
     rm -rf libiconv-src
