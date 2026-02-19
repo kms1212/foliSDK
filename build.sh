@@ -143,7 +143,7 @@ unset LIBRARY_PATH
 if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     cd "$BUILDDIR"
 
-    curl -ZL -C - \
+    curl --retry 5 --retry-delay 2 -ZL -C - \
         -o "gmp-$GMP_VERSION.tar.xz" "$GMP_URL" \
         -o "mpfr-$MPFR_VERSION.tar.xz" "$MPFR_URL" \
         -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
@@ -169,43 +169,43 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
 
     # gmp
     rm -rf gmp-src
-    tar -xzf "gmp-$GMP_VERSION.tar.xz"
+    tar -xf "gmp-$GMP_VERSION.tar.xz"
     mv "gmp-$GMP_VERSION" gmp-src
     cp -f ../gcc-strata/config.sub gmp-src  # config.sub patch
 
     # mpfr
     rm -rf mpfr-src
-    tar -xzf "mpfr-$MPFR_VERSION.tar.xz"
+    tar -xf "mpfr-$MPFR_VERSION.tar.xz"
     mv "mpfr-$MPFR_VERSION" mpfr-src
     cp -f ../gcc-strata/config.sub mpfr-src  # config.sub patch
 
     # mpc
     rm -rf mpc-src
-    tar -xzf "mpc-$MPC_VERSION.tar.gz"
+    tar -xf "mpc-$MPC_VERSION.tar.gz"
     mv "mpc-$MPC_VERSION" mpc-src
     cp -f ../gcc-strata/config.sub mpc-src/build-aux  # config.sub patch
 
     # nettle
     rm -rf nettle-src
-    tar -xzf "nettle-$NETTLE_VERSION.tar.gz"
+    tar -xf "nettle-$NETTLE_VERSION.tar.gz"
     mv "nettle-$NETTLE_VERSION" nettle-src
     cp -f ../gcc-strata/config.sub nettle-src  # config.sub patch
 
     # libsodium
     rm -rf libsodium-src
-    tar -xzf "libsodium-$LIBSODIUM_VERSION.tar.gz"
+    tar -xf "libsodium-$LIBSODIUM_VERSION.tar.gz"
     mv "libsodium-$LIBSODIUM_VERSION" libsodium-src
     cp -f ../gcc-strata/config.sub libsodium-src/build-aux  # config.sub patch
 
     # libffi
     rm -rf libffi-src
-    tar -xzf "libffi-$LIBFFI_VERSION.tar.gz"
+    tar -xf "libffi-$LIBFFI_VERSION.tar.gz"
     mv "libffi-$LIBFFI_VERSION" libffi-src
     cp -f ../gcc-strata/config.sub libffi-src  # config.sub patch
 
     # libuv
     rm -rf libuv-src
-    tar -xzf "libuv-v$LIBUV_VERSION.tar.gz"
+    tar -xf "libuv-v$LIBUV_VERSION.tar.gz"
     mv "libuv-v$LIBUV_VERSION" libuv-src
 
     # libuv (autogen)
@@ -241,38 +241,38 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
 
     # yyjson
     rm -rf yyjson-src
-    tar -xzf "yyjson-$YYJSON_VERSION.tar.gz"
+    tar -xf "yyjson-$YYJSON_VERSION.tar.gz"
     mv "yyjson-$YYJSON_VERSION" yyjson-src
 
     # zlib
     rm -rf zlib-src
-    tar -xzf "zlib-$ZLIB_VERSION.tar.gz"
+    tar -xf "zlib-$ZLIB_VERSION.tar.gz"
     mv "zlib-$ZLIB_VERSION" zlib-src
 
     # bzip2
     rm -rf bzip2-src
-    tar -xzf "bzip2-$BZIP2_VERSION.tar.gz"
+    tar -xf "bzip2-$BZIP2_VERSION.tar.gz"
     mv "bzip2-$BZIP2_VERSION" bzip2-src
 
     # xz
     rm -rf xz-src
-    tar -xzf "xz-$XZ_VERSION.tar.gz"
+    tar -xf "xz-$XZ_VERSION.tar.gz"
     mv "xz-$XZ_VERSION" xz-src
     cp -f ../gcc-strata/config.sub xz-src/build-aux  # config.sub patch
 
     # lz4
     rm -rf lz4-src
-    tar -xzf "lz4-$LZ4_VERSION.tar.gz"
+    tar -xf "lz4-$LZ4_VERSION.tar.gz"
     mv "lz4-$LZ4_VERSION" lz4-src
 
     # zstd
     rm -rf zstd-src
-    tar -xzf "zstd-$ZSTD_VERSION.tar.gz"
+    tar -xf "zstd-$ZSTD_VERSION.tar.gz"
     mv "zstd-$ZSTD_VERSION" zstd-src
 
     # libarchive
     rm -rf libarchive-src
-    tar -xzf "libarchive-$LIBARCHIVE_VERSION.tar.gz"
+    tar -xf "libarchive-$LIBARCHIVE_VERSION.tar.gz"
     mv "libarchive-$LIBARCHIVE_VERSION" libarchive-src
     cp -f ../gcc-strata/config.sub libarchive-src/build/autoconf  # config.sub patch
     sed -i '' \
@@ -281,32 +281,32 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
 
     # libiconv
     rm -rf libiconv-src
-    tar -xzf "libiconv-$LIBICONV_VERSION.tar.gz"
+    tar -xf "libiconv-$LIBICONV_VERSION.tar.gz"
     mv "libiconv-$LIBICONV_VERSION" libiconv-src
     cp -f ../gcc-strata/config.sub libiconv-src/build-aux  # config.sub patch
     cp -f ../gcc-strata/config.sub libiconv-src/libcharset/build-aux  # config.sub patch
 
     # ncurses
     rm -rf ncurses-src
-    tar -xzf "ncurses-$NCURSES_VERSION.tar.gz"
+    tar -xf "ncurses-$NCURSES_VERSION.tar.gz"
     mv "ncurses-$NCURSES_VERSION" ncurses-src
     cp -f ../gcc-strata/config.sub ncurses-src  # config.sub patch
 
     # editline
     rm -rf editline-src
-    tar -xzf "editline-$EDITLINE_VERSION.tar.gz"
+    tar -xf "editline-$EDITLINE_VERSION.tar.gz"
     mv "editline-$EDITLINE_VERSION" editline-src
     cp -f ../gcc-strata/config.sub editline-src/aux  # config.sub patch
 
     # readline
     rm -rf readline-src
-    tar -xzf "readline-$READLINE_VERSION.tar.gz"
+    tar -xf "readline-$READLINE_VERSION.tar.gz"
     mv "readline-$READLINE_VERSION" readline-src
     cp -f ../gcc-strata/config.sub readline-src/support  # config.sub patch
 
     # sqlite3
     rm -rf sqlite3-src
-    tar -xzf "sqlite-autoconf-$SQLITE3_VERSION.tar.gz"
+    tar -xf "sqlite-autoconf-$SQLITE3_VERSION.tar.gz"
     DIRNAME=$(tar -tf "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" | head -1 | cut -f1 -d"/")
     mv "$DIRNAME" sqlite3-src
     cp -f ../gcc-strata/config.sub sqlite3-src/autosetup/autosetup-config.sub  # config.sub patch
