@@ -38,7 +38,7 @@ jobs:
     - name: Install Dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install texinfo wget gnu-getopt
+        brew install texinfo wget gnu-getopt automake
         echo "$(brew --prefix texinfo)/bin" >> $GITHUB_PATH
 
     - name: Setup Prerequisites

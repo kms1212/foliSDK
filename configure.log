@@ -1,7 +1,0 @@
---------------------
-build/zlib-src/configure --help
-Wed Feb 18 15:49:32 KST 2026
-usage:
-  configure [--const] [--zprefix] [--prefix=PREFIX]  [--eprefix=EXPREFIX]
-    [--static] [--64] [--libdir=LIBDIR] [--sharedlibdir=LIBDIR]
-    [--includedir=INCLUDEDIR] [--archs="-arch i386 -arch x86_64"]

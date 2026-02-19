@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -xeu
 
 # Common Variables
 OSNAME=$(uname -s)
