@@ -143,30 +143,29 @@ unset LIBRARY_PATH
 if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     cd "$BUILDDIR"
 
-    # curl -ZL -C - \
-    #     -o "gmp-$GMP_VERSION.tar.gz" "$GMP_URL" \
-    #     -o "mpfr-$MPFR_VERSION.tar.gz" "$MPFR_URL" \
-    #     -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
-    #     -o "nettle-$NETTLE_VERSION.tar.gz" "$NETTLE_URL" \
-    #     -o "libsodium-$LIBSODIUM_VERSION.tar.gz" "$LIBSODIUM_URL" \
-    #     -o "libffi-$LIBFFI_VERSION.tar.gz" "$LIBFFI_URL" \
-    #     -o "libuv-v$LIBUV_VERSION.tar.gz" "$LIBUV_URL" \
-    #     -o "libxml2-$LIBXML2_VERSION.tar.xz" "$LIBXML2_URL" \
-    #     -o "libxslt-$LIBXSLT_VERSION.tar.xz" "$LIBXSLT_URL" \
-    #     -o "expat-$LIBEXPAT_VERSION.tar.xz" "$LIBEXPAT_URL" \
-    #     -o "tomlc17-$TOMLC17_VERSION.tar.gz" "$TOMLC17_URL" \
-    #     -o "yyjson-$YYJSON_VERSION.tar.gz" "$YYJSON_URL" \
-    #     -o "zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_URL" \
-    #     -o "bzip2-$BZIP2_VERSION.tar.gz" "$BZIP2_URL" \
-    #     -o "xz-$XZ_VERSION.tar.gz" "$XZ_URL" \
-    #     -o "lz4-$LZ4_VERSION.tar.gz" "$LZ4_URL" \
-    #     -o "zstd-$ZSTD_VERSION.tar.gz" "$ZSTD_URL" \
-    #     -o "libarchive-$LIBARCHIVE_VERSION.tar.gz" "$LIBARCHIVE_URL" \
-    #     -o "libiconv-$LIBICONV_VERSION.tar.gz" "$LIBICONV_URL" \
-    #     -o "ncurses-$NCURSES_VERSION.tar.gz" "$NCURSES_URL" \
-    #     -o "editline-$EDITLINE_VERSION.tar.gz" "$EDITLINE_URL" \
-    #     -o "readline-$READLINE_VERSION.tar.gz" "$READLINE_URL" \
-    #     -o "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" "$SQLITE3_URL"
+    curl -ZL -C - \
+        -o "gmp-$GMP_VERSION.tar.gz" "$GMP_URL" \
+        -o "mpfr-$MPFR_VERSION.tar.gz" "$MPFR_URL" \
+        -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
+        -o "nettle-$NETTLE_VERSION.tar.gz" "$NETTLE_URL" \
+        -o "libsodium-$LIBSODIUM_VERSION.tar.gz" "$LIBSODIUM_URL" \
+        -o "libffi-$LIBFFI_VERSION.tar.gz" "$LIBFFI_URL" \
+        -o "libuv-v$LIBUV_VERSION.tar.gz" "$LIBUV_URL" \
+        -o "libxml2-$LIBXML2_VERSION.tar.xz" "$LIBXML2_URL" \
+        -o "libxslt-$LIBXSLT_VERSION.tar.xz" "$LIBXSLT_URL" \
+        -o "expat-$LIBEXPAT_VERSION.tar.xz" "$LIBEXPAT_URL" \
+        -o "yyjson-$YYJSON_VERSION.tar.gz" "$YYJSON_URL" \
+        -o "zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_URL" \
+        -o "bzip2-$BZIP2_VERSION.tar.gz" "$BZIP2_URL" \
+        -o "xz-$XZ_VERSION.tar.gz" "$XZ_URL" \
+        -o "lz4-$LZ4_VERSION.tar.gz" "$LZ4_URL" \
+        -o "zstd-$ZSTD_VERSION.tar.gz" "$ZSTD_URL" \
+        -o "libarchive-$LIBARCHIVE_VERSION.tar.gz" "$LIBARCHIVE_URL" \
+        -o "libiconv-$LIBICONV_VERSION.tar.gz" "$LIBICONV_URL" \
+        -o "ncurses-$NCURSES_VERSION.tar.gz" "$NCURSES_URL" \
+        -o "editline-$EDITLINE_VERSION.tar.gz" "$EDITLINE_URL" \
+        -o "readline-$READLINE_VERSION.tar.gz" "$READLINE_URL" \
+        -o "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" "$SQLITE3_URL"
 
     # gmp
     rm -rf gmp-src
@@ -239,11 +238,6 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     tar -xf "expat-$LIBEXPAT_VERSION.tar.xz"
     mv "expat-$LIBEXPAT_VERSION" libexpat-src
     cp -f ../gcc-strata/config.sub libexpat-src/conftools  # config.sub patch
-
-    # tomlc17
-    rm -rf tomlc17-src
-    tar -xzf "tomlc17-$TOMLC17_VERSION.tar.gz"
-    mv "tomlc17-$TOMLC17_VERSION" tomlc17-src
 
     # yyjson
     rm -rf yyjson-src
@@ -928,36 +922,9 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libexpat-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-tomlc17-$ARCH.stamp" ]; then
-        cd "$BUILDDIR"
-
-        start_section "Configure tomlc17"
-        mkdir -p "tomlc17-$ARCH"
-        rm -rf "tomlc17-$ARCH"/*
-        cp -r tomlc17-src/* "tomlc17-$ARCH"
-        end_section
-
-        touch "$BUILDDIR/.configure-tomlc17-$ARCH.stamp"
-    fi
-
-    if [ ! -f "$BUILDDIR/.build-tomlc17-$ARCH.stamp" ]; then
-        cd "$BUILDDIR/tomlc17-$ARCH"
-
-        start_section "Make tomlc17"
-        make -j"$PARALLEL" PREFIX="/usr"
-        end_section
-
-        start_section "Install tomlc17"
-        make install PREFIX="/usr" DESTDIR="$PKGBUILDDIR/$SYSROOT"
-        end_section
-
-        touch "$BUILDDIR/.build-tomlc17-$ARCH.stamp"
-    fi
-
-
-    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH.stamp" ]; then
-        mkdir -p "$BUILDDIR/yyjson-$ARCH"
-        cd "$BUILDDIR/yyjson-$ARCH"
+    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH-shared.stamp" ]; then
+        mkdir -p "$BUILDDIR/yyjson-$ARCH-shared"
+        cd "$BUILDDIR/yyjson-$ARCH-shared"
 
         start_section "Configure yyjson"
         "$CMAKE" -S../yyjson-src -B. \
@@ -970,11 +937,11 @@ for ARCH in "${ARCHS[@]}"; do
             -DYYJSON_BUILD_TESTS=OFF
         end_section
 
-        touch "$BUILDDIR/.configure-yyjson-$ARCH.stamp"
+        touch "$BUILDDIR/.configure-yyjson-$ARCH-shared.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH.stamp" ]; then
-        cd "$BUILDDIR/yyjson-$ARCH"
+    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH-shared.stamp" ]; then
+        cd "$BUILDDIR/yyjson-$ARCH-shared"
 
         start_section "Make yyjson"
         make -j"$PARALLEL"
@@ -984,9 +951,40 @@ for ARCH in "${ARCHS[@]}"; do
         make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
         end_section
 
-        touch "$BUILDDIR/.build-yyjson-$ARCH.stamp"
+        touch "$BUILDDIR/.build-yyjson-$ARCH-shared.stamp"
     fi
 
+    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH-static.stamp" ]; then
+        mkdir -p "$BUILDDIR/yyjson-$ARCH-static"
+        cd "$BUILDDIR/yyjson-$ARCH-static"
+
+        start_section "Configure yyjson"
+        "$CMAKE" -S../yyjson-src -B. \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR="$ARCH" \
+            -DCMAKE_C_COMPILER="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
+            -DCMAKE_INSTALL_PREFIX="/usr" \
+            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$SYSROOT" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DYYJSON_BUILD_TESTS=OFF
+        end_section
+
+        touch "$BUILDDIR/.configure-yyjson-$ARCH-static.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH-static.stamp" ]; then
+        cd "$BUILDDIR/yyjson-$ARCH-static"
+
+        start_section "Make yyjson"
+        make -j"$PARALLEL"
+        end_section
+
+        start_section "Install yyjson"
+        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        end_section
+
+        touch "$BUILDDIR/.build-yyjson-$ARCH-static.stamp"
+    fi
 
     if [ ! -f "$BUILDDIR/.configure-zlib-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/zlib-$ARCH"
@@ -1138,7 +1136,6 @@ for ARCH in "${ARCHS[@]}"; do
             LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
             RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib" \
             CPPFLAGS="$CPPFLAGS -fPIC"  # TODO: remove -fPIC \
-            LDFLAGS="$LDFLAGS -shared" \
             ZSTD_LIB_ZLIB=1 \
             ZSTD_LIB_LZMA=1 \
             ZSTD_LIB_LZ4=1 \
@@ -1147,7 +1144,8 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Install zstd"
         make install \
             PREFIX="/usr" \
-            TARGET_OS=Linux \
+            TARGET_SYSTEM=Linux \
+            UNAME_TARGET_SYSTEM=Linux \
             DESTDIR="$PKGBUILDDIR/$SYSROOT"
         end_section
 

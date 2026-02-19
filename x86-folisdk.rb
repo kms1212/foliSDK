@@ -5,7 +5,7 @@ class X86Folisdk < Formula
   url "file://#{Dir.pwd}/build/folisdk.tar.gz"
   
   version "0.0.1"
-  sha256 "5238f3b9bca18e3cff384090c5732da6667a191e07e0bdca3e8293bd9c8f47bf"
+  sha256 "ce6975624fe43bab36219b2d280878465b48dae1341f6bd88af78022f347d241"
   
   keg_only "it conflicts with standard gdb and binutils"
 
@@ -23,7 +23,7 @@ class X86Folisdk < Formula
       - Libraries:
         gmp, mpfr, mpc, nettle, libsodium
         libffi, libuv
-        libxml2, libxslt, libexpat, tomlc17, yyjson,
+        libxml2, libxslt, libexpat, yyjson,
         zlib, zstd, bzip2, xz, lz4, libarchive,
         libiconv, ncurses, editline, readline,
         sqlite3
