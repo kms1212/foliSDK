@@ -169,13 +169,13 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
 
     # gmp
     rm -rf gmp-src
-    tar -xzf "gmp-$GMP_VERSION.tar.gz"
+    tar -xzf "gmp-$GMP_VERSION.tar.xz"
     mv "gmp-$GMP_VERSION" gmp-src
     cp -f ../gcc-strata/config.sub gmp-src  # config.sub patch
 
     # mpfr
     rm -rf mpfr-src
-    tar -xzf "mpfr-$MPFR_VERSION.tar.gz"
+    tar -xzf "mpfr-$MPFR_VERSION.tar.xz"
     mv "mpfr-$MPFR_VERSION" mpfr-src
     cp -f ../gcc-strata/config.sub mpfr-src  # config.sub patch
 
