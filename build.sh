@@ -620,18 +620,20 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-musl-pass2-$ARCH.stamp"
     fi
 
+    export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
+    export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
+    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar"
+    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm"
+    export AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as"
+    export LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld"
+    export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip"
+    export RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib"
+
     if [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gmp-$ARCH"
         cd "$BUILDDIR/gmp-$ARCH"
 
         start_section "Configure gmp"
-        CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-        AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar" \
-        NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
-        AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as" \
-        LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
-        STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip" \
-        RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib" \
         CFLAGS="-std=gnu11" \
         ../gmp-src/configure \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
@@ -1042,9 +1044,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Make bzip2"
         make libbz2.a bzip2 bzip2recover -j"$PARALLEL" \
             PREFIX="/usr" \
-            CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-            AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar" \
-            RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib"
+            CC="$CC" \
+            AR="$AR" \
+            RANLIB="$RANLIB"
         end_section
 
         start_section "Install bzip2"
@@ -1104,11 +1106,11 @@ for ARCH in "${ARCHS[@]}"; do
         make -j"$PARALLEL" \
             PREFIX="/usr" \
             TARGET_OS=Linux \
-            CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-            AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar" \
-            NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
-            LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
-            RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib"
+            CC="$CC" \
+            AR="$AR" \
+            NM="$NM" \
+            LD="$LD" \
+            RANLIB="$RANLIB"
         end_section
 
         start_section "Install lz4"
@@ -1141,11 +1143,11 @@ for ARCH in "${ARCHS[@]}"; do
             PREFIX="/usr" \
             TARGET_SYSTEM=Linux \
             UNAME_TARGET_SYSTEM=Linux \
-            CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-            AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar" \
-            NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
-            LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
-            RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib" \
+            CC="$CC" \
+            AR="$AR" \
+            NM="$NM" \
+            LD="$LD" \
+            RANLIB="$RANLIB" \
             CPPFLAGS="$CPPFLAGS -fPIC" \
             LDFLAGS="$LDFLAGS -shared" \
             ZSTD_LIB_ZLIB=1 \
