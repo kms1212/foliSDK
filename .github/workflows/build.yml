@@ -46,6 +46,12 @@ jobs:
         chmod +x setup_prerequisites.sh
         ./setup_prerequisites.sh
 
+    - name: Debug - SSH into runner
+      if: runner.os == 'Linux'
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true
+
     - name: Run Build Script
       run: |
         chmod +x build.sh

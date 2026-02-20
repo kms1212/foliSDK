@@ -278,7 +278,7 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     tar -xf "libarchive-$LIBARCHIVE_VERSION.tar.gz"
     mv "libarchive-$LIBARCHIVE_VERSION" libarchive-src
     cp -f ../gcc-strata/config.sub libarchive-src/build/autoconf  # config.sub patch
-    if [ $SED_TYPE == "bsd" ]; then
+    if [ "$SED_TYPE" == "bsd" ]; then
         sed -i '' \
             's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
             "libarchive-src/libarchive/archive_hmac.c"
