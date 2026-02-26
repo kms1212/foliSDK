@@ -1,0 +1,43 @@
+diff --color -Naru zlib-src.orig/folios/Makefile.gcc zlib-src/folios/Makefile.gcc
+--- zlib-src.orig/folios/Makefile.gcc	1970-01-01 09:00:00
++++ zlib-src/folios/Makefile.gcc	2026-02-23 08:08:36
+@@ -0,0 +1,39 @@
++# Makefile for zlib
++# GCC for foliOS
++
++STATICLIB = libz.sl
++SHAREDLIB = libz.dl
++SHAREDLIBV = libz.dl.1
++SHAREDLIBM = libz.dl.1.3.1
++
++PREFIX ?= /usr
++
++override CFLAGS += -O3 -Wall -fPIC -D_LARGEFILE64_SOURCE=1 -DHAVE_UNISTD_H -DHAVE_STDARG_H -DHAVE_HIDDEN
++
++OBJS = adler32.o compress.o crc32.o deflate.o gzclose.o gzlib.o gzread.o \
++       gzwrite.o infback.o inffast.o inflate.o inftrees.o trees.o uncompr.o zutil.o
++
++all: zconf.h $(STATICLIB) $(SHAREDLIB)
++
++zconf.h:
++	cp zconf.h.in zconf.h
++
++.c.o:
++	$(CC) $(CFLAGS) -c -o $@ $<
++
++$(STATICLIB): $(OBJS)
++	$(LD) -r -o $@ $(OBJS)
++
++$(SHAREDLIB): $(OBJS)
++	$(CC) -shared -Wl,-soname,$(SHAREDLIBV) $(LDFLAGS) -o $@ $(OBJS)
++	ln -sf $(SHAREDLIB) $(SHAREDLIBV)
++	ln -sf $(SHAREDLIB) $(SHAREDLIBM)
++
++install: all
++	mkdir -p $(DESTDIR)$(PREFIX)/include
++	mkdir -p $(DESTDIR)$(PREFIX)/lib
++	cp zlib.h zconf.h $(DESTDIR)$(PREFIX)/include/
++	cp $(STATICLIB) $(SHAREDLIB) $(SHAREDLIBV) $(SHAREDLIBM) $(DESTDIR)$(PREFIX)/lib/
++
++clean:
++	rm -f *.o *.sl *.dl *.dl.* zconf.h

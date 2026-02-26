@@ -1,0 +1,179 @@
+diff --color -Naru zstd-src.orig/Makefile zstd-src/Makefile
+--- zstd-src.orig/Makefile	2026-02-23 21:27:49
++++ zstd-src/Makefile	2026-02-23 21:29:13
+@@ -34,7 +34,11 @@
+ ifneq (,$(filter Windows%,$(TARGET_SYSTEM)))
+   EXT =.exe
+ else
+-  EXT =
++  ifneq (,$(filter foliOS%,$(TARGET_SYSTEM)))
++    EXT =.app
++  else
++    EXT =
++  endif
+ endif
+ 
+ ## default: Build lib-release and zstd-release
+diff --color -Naru zstd-src.orig/lib/Makefile zstd-src/lib/Makefile
+--- zstd-src.orig/lib/Makefile	2026-02-23 21:27:50
++++ zstd-src/lib/Makefile	2026-02-23 21:36:53
+@@ -81,14 +81,21 @@
+   SHARED_EXT_VER = $(LIBVER).$(SHARED_EXT)
+   SONAME_FLAGS = -install_name $(LIBDIR)/libzstd.$(SHARED_EXT_MAJOR) -compatibility_version $(LIBVER_MAJOR) -current_version $(LIBVER)
+ else
+-  ifeq ($(UNAME_TARGET_SYSTEM), AIX)
+-    SONAME_FLAGS =
++  ifeq ($(UNAME_TARGET_SYSTEM), foliOS)
++	SHARED_EXT = dl
++	SHARED_EXT_MAJOR = $(SHARED_EXT).$(LIBVER_MAJOR)
++	SHARED_EXT_VER = $(SHARED_EXT).$(LIBVER)
++	SONAME_FLAGS = -Wl,-soname=zstd.$(SHARED_EXT).$(LIBVER_MAJOR)
+   else
+-    SONAME_FLAGS = -Wl,-soname=libzstd.$(SHARED_EXT).$(LIBVER_MAJOR)
++	ifeq ($(UNAME_TARGET_SYSTEM), AIX)
++		SONAME_FLAGS =
++	else
++		SONAME_FLAGS = -Wl,-soname=libzstd.$(SHARED_EXT).$(LIBVER_MAJOR)
++	endif
++	SHARED_EXT = so
++	SHARED_EXT_MAJOR = $(SHARED_EXT).$(LIBVER_MAJOR)
++	SHARED_EXT_VER = $(SHARED_EXT).$(LIBVER)
+   endif
+-  SHARED_EXT = so
+-  SHARED_EXT_MAJOR = $(SHARED_EXT).$(LIBVER_MAJOR)
+-  SHARED_EXT_VER = $(SHARED_EXT).$(LIBVER)
+ endif
+ 
+ 
+@@ -96,8 +103,8 @@
+ all: lib
+ 
+ 
+-.PHONY: libzstd.a  # must be run every time
+-libzstd.a: CPPFLAGS += $(CPPFLAGS_STATICLIB)
++.PHONY: zstd.sl  # must be run every time
++zstd.sl: CPPFLAGS += $(CPPFLAGS_STATICLIB)
+ 
+ SET_CACHE_DIRECTORY = \
+    +$(MAKE) --no-print-directory $@ \
+@@ -109,14 +116,14 @@
+ ifndef BUILD_DIR
+ # determine BUILD_DIR from compilation flags
+ 
+-libzstd.a:
++zstd.sl:
+ 	$(SET_CACHE_DIRECTORY)
+ 
+ else
+ # BUILD_DIR is defined
+ 
+ ZSTD_STATICLIB_DIR := $(BUILD_DIR)/static
+-ZSTD_STATICLIB := $(ZSTD_STATICLIB_DIR)/libzstd.a
++ZSTD_STATICLIB := $(ZSTD_STATICLIB_DIR)/zstd.sl
+ ZSTD_STATICLIB_OBJ := $(addprefix $(ZSTD_STATICLIB_DIR)/,$(ZSTD_LOCAL_OBJ))
+ $(ZSTD_STATICLIB): ARFLAGS = rcs
+ $(ZSTD_STATICLIB): | $(ZSTD_STATICLIB_DIR)
+@@ -125,9 +132,9 @@
+ 	$(if $(filter -DZSTD_MULTITHREAD,$(CPPFLAGS)),\
+     @echo compiling multi-threaded static library $(LIBVER),\
+     @echo compiling single-threaded static library $(LIBVER))
+-	$(AR) $(ARFLAGS) $@ $^
++	$(LD) -r -o $@ $^
+ 
+-libzstd.a: $(ZSTD_STATICLIB)
++zstd.sl: $(ZSTD_STATICLIB)
+ 	cp -f $< $@
+ 
+ endif
+@@ -141,7 +148,7 @@
+ 
+ else  # not Windows
+ 
+-LIBZSTD = libzstd.$(SHARED_EXT_VER)
++LIBZSTD = zstd.$(SHARED_EXT_VER)
+ .PHONY: $(LIBZSTD)  # must be run every time
+ $(LIBZSTD): CPPFLAGS += $(CPPFLAGS_DYNLIB)
+ $(LIBZSTD): CFLAGS   += -fPIC -fvisibility=hidden
+@@ -168,8 +175,8 @@
+     @echo compiling single-threaded dynamic library $(LIBVER))
+ 	$(CC) $(FLAGS) $^ $(LDFLAGS) $(SONAME_FLAGS) -o $@
+ 	@echo creating versioned links
+-	ln -sf $@ libzstd.$(SHARED_EXT_MAJOR)
+-	ln -sf $@ libzstd.$(SHARED_EXT)
++	ln -sf $@ zstd.$(SHARED_EXT_MAJOR)
++	ln -sf $@ zstd.$(SHARED_EXT)
+ 
+ $(LIBZSTD): $(ZSTD_DYNLIB)
+ 	cp -f $< $@
+@@ -181,7 +188,7 @@
+ libzstd : $(LIBZSTD)
+ 
+ .PHONY: lib
+-lib : libzstd.a libzstd
++lib : zstd.sl libzstd
+ 
+ 
+ # note : do not define lib-mt or lib-release as .PHONY
+@@ -260,7 +267,7 @@
+ .PHONY: clean
+ clean:
+ 	$(RM) -r *.dSYM   # macOS-specific
+-	$(RM) core *.o *.a *.gcda *.$(SHARED_EXT) *.$(SHARED_EXT).* libzstd.pc
++	$(RM) core *.o *.a *.sl *.gcda *.$(SHARED_EXT) *.$(SHARED_EXT).* libzstd.pc
+ 	$(RM) dll/libzstd.dll dll/libzstd.lib libzstd-nomt*
+ 	$(RM) -r obj/*
+ 	@echo Cleaning library completed
+@@ -350,11 +357,11 @@
+ 
+ .PHONY: install-static
+ install-static:
+-	# only generate libzstd.a if it's not already present
+-	[ -e libzstd.a ] || $(MAKE) libzstd.a-release
++	# only generate zstd.sl if it's not already present
++	[ -e zstd.sl ] || $(MAKE) zstd.sl-release
+ 	[ -e $(DESTDIR)$(LIBDIR) ] || $(INSTALL) -d -m 755 $(DESTDIR)$(LIBDIR)/
+ 	@echo Installing static library
+-	$(INSTALL_DATA) libzstd.a $(DESTDIR)$(LIBDIR)
++	$(INSTALL_DATA) zstd.sl $(DESTDIR)$(LIBDIR)
+ 
+ .PHONY: install-shared
+ install-shared:
+@@ -363,8 +370,8 @@
+ 	[ -e $(DESTDIR)$(LIBDIR) ] || $(INSTALL) -d -m 755 $(DESTDIR)$(LIBDIR)/
+ 	@echo Installing shared library
+ 	$(INSTALL_PROGRAM) $(LIBZSTD) $(DESTDIR)$(LIBDIR)
+-	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT_MAJOR)
+-	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT)
++	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/zstd.$(SHARED_EXT_MAJOR)
++	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/zstd.$(SHARED_EXT)
+ 
+ .PHONY: install-includes
+ install-includes:
+@@ -376,9 +383,9 @@
+ 
+ .PHONY: uninstall
+ uninstall:
+-	$(RM) $(DESTDIR)$(LIBDIR)/libzstd.a
+-	$(RM) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT)
+-	$(RM) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT_MAJOR)
++	$(RM) $(DESTDIR)$(LIBDIR)/zstd.sl
++	$(RM) $(DESTDIR)$(LIBDIR)/zstd.$(SHARED_EXT)
++	$(RM) $(DESTDIR)$(LIBDIR)/zstd.$(SHARED_EXT_MAJOR)
+ 	$(RM) $(DESTDIR)$(LIBDIR)/$(LIBZSTD)
+ 	$(RM) $(DESTDIR)$(PKGCONFIGDIR)/libzstd.pc
+ 	$(RM) $(DESTDIR)$(INCLUDEDIR)/zstd.h
+diff --color -Naru zstd-src.orig/programs/Makefile zstd-src/programs/Makefile
+--- zstd-src.orig/programs/Makefile	2026-02-23 21:27:50
++++ zstd-src/programs/Makefile	2026-02-23 21:41:43
+@@ -58,7 +58,11 @@
+     RES_FILE = $(RES32_FILE)
+ endif
+ else
++ifneq (,$(filter foliOS%,$(OS)))
++  EXT =.app
++else
+   EXT =
++endif
+ endif
+ 
+ # thread detection

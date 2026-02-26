@@ -1,0 +1,101 @@
+diff --color -Naru nettle-src.orig/Makefile.in nettle-src/Makefile.in
+--- nettle-src.orig/Makefile.in	2026-02-06 04:18:44
++++ nettle-src/Makefile.in	2026-02-23 04:00:53
+@@ -27,7 +27,7 @@
+ PRE_CPPFLAGS = -I. -I$(srcdir)
+ EXTRA_CFLAGS = $(CCPIC)
+ 
+-LIBTARGETS = @IF_STATIC@ libnettle.a @IF_HOGWEED@ libhogweed.a
++LIBTARGETS = @IF_STATIC@ libnettle.sl @IF_HOGWEED@ libhogweed.sl
+ SHLIBTARGETS = @IF_SHARED@ $(LIBNETTLE_FORLINK) @IF_HOGWEED@ $(LIBHOGWEED_FORLINK)
+ 
+ gnulib_FILES = lib/getopt-core.h lib/getopt-ext.h \
+@@ -302,16 +302,14 @@
+ hogweed_OBJS = $(hogweed_SOURCES:.c=.$(OBJEXT)) \
+ 	       $(OPT_HOGWEED_OBJS) @IF_MINI_GMP@ mini-gmp.$(OBJEXT)
+ 
+-libnettle.a: $(nettle_OBJS)
++libnettle.sl: $(nettle_OBJS)
+ 	-rm -f $@
+-	$(AR) $(ARFLAGS) $@ $(nettle_OBJS)
+-	$(RANLIB) $@
++	$(LD) -r -o $@ $(nettle_OBJS)
+ 	echo nettle > libnettle.stamp
+ 
+-libhogweed.a: $(hogweed_OBJS)
++libhogweed.sl: $(hogweed_OBJS)
+ 	-rm -f $@
+-	$(AR) $(ARFLAGS) $@ $(hogweed_OBJS)
+-	$(RANLIB) $@
++	$(LD) -r -o $@ $(hogweed_OBJS)
+ 	echo hogweed > libhogweed.stamp
+ 
+ %.$(OBJEXT): %.asm $(srcdir)/m4-utils.m4 $(srcdir)/asm.m4 config.m4 machine.m4
+@@ -696,7 +694,7 @@
+ 	$(rm_distcheck)
+ 
+ clean-here:
+-	-rm -f $(TARGETS) *.$(OBJEXT) *.$(OBJEXT).d *.s *.so *.dll *.a \
++	-rm -f $(TARGETS) *.$(OBJEXT) *.$(OBJEXT).d *.s *.so *.dll *.a *.sl \
+ 		ecc-curve25519.h ecc-curve448.h \
+ 		ecc-gost-gc256b.h ecc-gost-gc512a.h \
+ 		ecc-secp192r1.h ecc-secp224r1.h ecc-secp256r1.h \
+diff --color -Naru nettle-src.orig/configure.ac nettle-src/configure.ac
+--- nettle-src.orig/configure.ac	2026-02-06 04:18:44
++++ nettle-src/configure.ac	2026-02-23 03:58:34
+@@ -806,6 +806,19 @@
+     LIBHOGWEED_LINK='$(CC) $(CFLAGS) $(LDFLAGS) --shared -h $(LIBHOGWEED_SONAME)'
+     LIBHOGWEED_LIBS='libnettle.so $(LIBS)'
+     ;;
++  folios* | strata*-folios*)
++    LIBNETTLE_FORLINK=libnettle.dl
++    LIBNETTLE_SONAME='$(LIBNETTLE_FORLINK).$(LIBNETTLE_MAJOR)'
++    LIBNETTLE_FILE='$(LIBNETTLE_SONAME).$(LIBNETTLE_MINOR)'
++    LIBNETTLE_LINK='$(CC) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname=$(LIBNETTLE_SONAME)'
++    LIBNETTLE_LIBS=''
++
++    LIBHOGWEED_FORLINK=libhogweed.dl
++    LIBHOGWEED_SONAME='$(LIBHOGWEED_FORLINK).$(LIBHOGWEED_MAJOR)'
++    LIBHOGWEED_FILE='$(LIBHOGWEED_SONAME).$(LIBHOGWEED_MINOR)'
++    LIBHOGWEED_LINK='$(CC) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname=$(LIBHOGWEED_SONAME)'
++    LIBHOGWEED_LIBS='libnettle.dl $(LIBS)'
++    ;;
+   *)
+     LIBNETTLE_FORLINK=libnettle.so
+     LIBNETTLE_SONAME='$(LIBNETTLE_FORLINK).$(LIBNETTLE_MAJOR)'
+diff --color -Naru nettle-src.orig/testsuite/symbols-test nettle-src/testsuite/symbols-test
+--- nettle-src.orig/testsuite/symbols-test	2026-02-06 04:18:45
++++ nettle-src/testsuite/symbols-test	2026-02-23 03:58:34
+@@ -19,27 +19,27 @@
+ #   ____chkstk_darwin into the majority of binaries/libraries, including
+ #   both the libraries checked here.
+ 
+-( $NM -g ../libnettle.a || $NM ../libnettle.a ) \
++( $NM -g ../libnettle.sl || $NM ../libnettle.sl ) \
+     | grep ' [DRT] ' | egrep -v '( |^|\.)(\.?_?(_?nettle_)|get_pc_thunk|(_*chkstk_darwin))' \
+     | sort -k3 > test1.out
+ 
+ if [ -s test1.out ] ; then
+-    echo Exported symbols in libnettle.a, lacking the nettle prefix:
++    echo Exported symbols in libnettle.sl, lacking the nettle prefix:
+     cat test1.out
+     exit 1
+ fi
+ 
+-if [ -s ../libhogweed.a ] ; then
++if [ -s ../libhogweed.sl ] ; then
+     PATTERN='\.?_?_?nettle_|get_pc_thunk|(_*chkstk_darwin)'
+     if grep '^#define.*NETTLE_USE_MINI_GMP.*1$' ../version.h >/dev/null ; then
+ 	PATTERN="$PATTERN|_?(mp_|mpz_|mpn_)"
+     fi
+-    ( $NM -g ../libhogweed.a || $NM ../libhogweed.a ) \
++    ( $NM -g ../libhogweed.sl || $NM ../libhogweed.sl ) \
+ 	| grep ' [DRT] ' | egrep -v "( |^|\.)($PATTERN)" \
+ 	| sort -k3 > test1.out
+ 
+     if [ -s test1.out ] ; then
+-	echo Exported symbols in libhogweed.a, lacking the nettle prefix:
++	echo Exported symbols in libhogweed.sl, lacking the nettle prefix:
+ 	cat test1.out
+ 	exit 1
+     fi

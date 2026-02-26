@@ -6,18 +6,32 @@ set -xeu
 OSNAME=$(uname -s)
 ROOT="$PWD"
 
-
-# OS-Dependent Tools
+# OS-Dependent Configurations
 if [ "$OSNAME" == "Darwin" ]; then
     GETOPT="/opt/homebrew/opt/gnu-getopt/bin/getopt"
     TCLSH="/opt/homebrew/opt/tcl-tk/bin/tclsh"
+    M4="/opt/homebrew/opt/m4/bin/m4"
+    ACLOCAL_1_15_HOST="/opt/automake-1.15/bin/aclocal"
+    AUTOMAKE_1_15_HOST="/opt/automake-1.15/bin/automake"
+    AUTOCONF_2_69_HOST="/opt/autoconf-2.69/bin/autoconf"
+    AUTORECONF_2_69_HOST="/opt/autoconf-2.69/bin/autoreconf"
     SED_TYPE="bsd"
 else
-    GETOPT="getopt"
-    TCLSH="tclsh"
+    GETOPT="$(which getopt)"
+    TCLSH="$(which tclsh)"
+    M4="$(which m4)"
+    # TODO: use proper search method
+    ACLOCAL_1_15_HOST="/opt/automake-1.15/bin/aclocal"
+    AUTOMAKE_1_15_HOST="/opt/automake-1.15/bin/automake"
+    AUTOCONF_2_69_HOST="/opt/autoconf-2.69/bin/autoconf"
+    AUTORECONF_2_69_HOST="/opt/autoconf-2.69/bin/autoreconf"
     SED_TYPE="gnu"
 fi
-CMAKE="$(which cmake)"
+ACLOCAL_HOST="$(which aclocal)"
+AUTOMAKE_HOST="$(which automake)"
+AUTOCONF_HOST="$(which autoconf)"
+AUTORECONF_HOST="$(which autoreconf)"
+AUTOHEADER_HOST="$(which autoheader)"
 
 
 # Option Variables
@@ -110,7 +124,7 @@ fi
 
 
 # Library Version Configs
-source builtin_libraries.cfg
+source versions.cfg
 
 
 # Helper Functions
@@ -133,7 +147,8 @@ end_section() {
 PKGBUILDDIR="$BUILDDIR/pkgroot"
 mkdir -p "$PKGBUILDDIR"
 
-export PATH="$PREFIX/bin:$PKGBUILDDIR/$PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export M4="$M4"
+export PATH="$PKGBUILDDIR/$PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export CPPFLAGS="-I$PKGBUILDDIR/$PREFIX/include"
 export LDFLAGS="-L$PKGBUILDDIR/$PREFIX/lib"
 unset LD_LIBRARY_PATH
@@ -146,10 +161,14 @@ unset LIBRARY_PATH
 if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     cd "$BUILDDIR"
 
-    curl --retry 5 --retry-delay 2 -ZL -C - \
+    git clone https://git.savannah.gnu.org/git/gnulib.git --depth 1
+
+    curl --retry 5 --retry-delay 2 -ZL \
+        -o "pkg-config-$PKGCONFIG_VERSION.tar.gz" "$PKGCONFIG_URL" \
         -o "gmp-$GMP_VERSION.tar.xz" "$GMP_URL" \
         -o "mpfr-$MPFR_VERSION.tar.xz" "$MPFR_URL" \
         -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
+        -o "isl-$ISL_VERSION.tar.gz" "$ISL_URL" \
         -o "nettle-$NETTLE_VERSION.tar.gz" "$NETTLE_URL" \
         -o "libsodium-$LIBSODIUM_VERSION.tar.gz" "$LIBSODIUM_URL" \
         -o "libffi-$LIBFFI_VERSION.tar.gz" "$LIBFFI_URL" \
@@ -170,77 +189,71 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
         -o "readline-$READLINE_VERSION.tar.gz" "$READLINE_URL" \
         -o "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" "$SQLITE3_URL"
 
+    touch "$BUILDDIR/.download-sources.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.extract-sources.stamp" ]; then
+    cd "$BUILDDIR"
+
+    # pkgconfig
+    rm -rf pkgconfig-src
+    tar -xf "pkg-config-$PKGCONFIG_VERSION.tar.gz"
+    mv "pkg-config-$PKGCONFIG_VERSION" pkgconfig-src
+
     # gmp
     rm -rf gmp-src
     tar -xf "gmp-$GMP_VERSION.tar.xz"
     mv "gmp-$GMP_VERSION" gmp-src
-    cp -f ../gcc-strata/config.sub gmp-src  # config.sub patch
 
     # mpfr
     rm -rf mpfr-src
     tar -xf "mpfr-$MPFR_VERSION.tar.xz"
     mv "mpfr-$MPFR_VERSION" mpfr-src
-    cp -f ../gcc-strata/config.sub mpfr-src  # config.sub patch
 
     # mpc
     rm -rf mpc-src
     tar -xf "mpc-$MPC_VERSION.tar.gz"
     mv "mpc-$MPC_VERSION" mpc-src
-    cp -f ../gcc-strata/config.sub mpc-src/build-aux  # config.sub patch
+
+    # isl
+    rm -rf isl-src
+    tar -xf "isl-$ISL_VERSION.tar.gz"
+    mv "isl-$ISL_VERSION" isl-src
 
     # nettle
     rm -rf nettle-src
     tar -xf "nettle-$NETTLE_VERSION.tar.gz"
     mv "nettle-$NETTLE_VERSION" nettle-src
-    cp -f ../gcc-strata/config.sub nettle-src  # config.sub patch
 
     # libsodium
     rm -rf libsodium-src
     tar -xf "libsodium-$LIBSODIUM_VERSION.tar.gz"
     mv "libsodium-$LIBSODIUM_VERSION" libsodium-src
-    cp -f ../gcc-strata/config.sub libsodium-src/build-aux  # config.sub patch
 
     # libffi
     rm -rf libffi-src
     tar -xf "libffi-$LIBFFI_VERSION.tar.gz"
     mv "libffi-$LIBFFI_VERSION" libffi-src
-    cp -f ../gcc-strata/config.sub libffi-src  # config.sub patch
 
     # libuv
     rm -rf libuv-src
     tar -xf "libuv-v$LIBUV_VERSION.tar.gz"
     mv "libuv-v$LIBUV_VERSION" libuv-src
 
-    # libuv (autogen)
-    cd libuv-src
-
-    OLD_PATH="$PATH"
-    if [ "$OSNAME" == "Darwin" ]; then
-        export PATH="/opt/homebrew/bin:$PATH"
-    fi
-    sh autogen.sh
-    export PATH="$OLD_PATH"
-
-    cd ..
-    cp -f ../gcc-strata/config.sub libuv-src  # config.sub patch
-
     # libxml2
     rm -rf libxml2-src
     tar -xf "libxml2-$LIBXML2_VERSION.tar.xz"
     mv "libxml2-$LIBXML2_VERSION" libxml2-src
-    cp -f ../gcc-strata/config.sub libxml2-src  # config.sub patch
 
     # libxslt
     rm -rf libxslt-src
     tar -xf "libxslt-$LIBXSLT_VERSION.tar.xz"
     mv "libxslt-$LIBXSLT_VERSION" libxslt-src
-    cp -f ../gcc-strata/config.sub libxslt-src  # config.sub patch
 
     # libexpat
     rm -rf libexpat-src
     tar -xf "expat-$LIBEXPAT_VERSION.tar.xz"
     mv "expat-$LIBEXPAT_VERSION" libexpat-src
-    cp -f ../gcc-strata/config.sub libexpat-src/conftools  # config.sub patch
 
     # yyjson
     rm -rf yyjson-src
@@ -261,7 +274,6 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     rm -rf xz-src
     tar -xf "xz-$XZ_VERSION.tar.gz"
     mv "xz-$XZ_VERSION" xz-src
-    cp -f ../gcc-strata/config.sub xz-src/build-aux  # config.sub patch
 
     # lz4
     rm -rf lz4-src
@@ -277,50 +289,460 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
     rm -rf libarchive-src
     tar -xf "libarchive-$LIBARCHIVE_VERSION.tar.gz"
     mv "libarchive-$LIBARCHIVE_VERSION" libarchive-src
-    cp -f ../gcc-strata/config.sub libarchive-src/build/autoconf  # config.sub patch
-    if [ "$SED_TYPE" == "bsd" ]; then
-        sed -i '' \
-            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
-            "libarchive-src/libarchive/archive_hmac.c"
-    else
-        sed -i \
-            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
-            "libarchive-src/libarchive/archive_hmac.c"
-    fi
 
     # libiconv
     rm -rf libiconv-src
     tar -xf "libiconv-$LIBICONV_VERSION.tar.gz"
     mv "libiconv-$LIBICONV_VERSION" libiconv-src
-    cp -f ../gcc-strata/config.sub libiconv-src/build-aux  # config.sub patch
-    cp -f ../gcc-strata/config.sub libiconv-src/libcharset/build-aux  # config.sub patch
 
     # ncurses
     rm -rf ncurses-src
     tar -xf "ncurses-$NCURSES_VERSION.tar.gz"
     mv "ncurses-$NCURSES_VERSION" ncurses-src
-    cp -f ../gcc-strata/config.sub ncurses-src  # config.sub patch
 
     # editline
     rm -rf editline-src
     tar -xf "editline-$EDITLINE_VERSION.tar.gz"
     mv "editline-$EDITLINE_VERSION" editline-src
-    cp -f ../gcc-strata/config.sub editline-src/aux  # config.sub patch
 
     # readline
     rm -rf readline-src
     tar -xf "readline-$READLINE_VERSION.tar.gz"
     mv "readline-$READLINE_VERSION" readline-src
-    cp -f ../gcc-strata/config.sub readline-src/support  # config.sub patch
 
     # sqlite3
     rm -rf sqlite3-src
     tar -xf "sqlite-autoconf-$SQLITE3_VERSION.tar.gz"
     DIRNAME=$(tar -tf "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" | head -1 | cut -f1 -d"/")
     mv "$DIRNAME" sqlite3-src
-    cp -f ../gcc-strata/config.sub sqlite3-src/autosetup/autosetup-config.sub  # config.sub patch
 
-    touch "$BUILDDIR/.download-sources.stamp"
+    touch "$BUILDDIR/.extract-sources.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.preconfigure-libtool.stamp" ]; then
+    start_section "Pre-Configure libtool"
+    cd "$ROOT/libtool-strata"
+    git clean -fdX
+    echo "2.5.4" > .tarball-version
+    echo "2.5.4" > .version
+    echo "4442" > .serial
+    OLD_PATH="$PATH"
+    if [ "$OSNAME" == "Darwin" ]; then
+        export PATH="$PATH:/opt/homebrew/bin"
+    fi
+    ./bootstrap --gnulib-srcdir="$BUILDDIR/gnulib" --skip-git --verbose
+    export PATH="$OLD_PATH"
+    end_section
+
+    touch "$BUILDDIR/.preconfigure-libtool.stamp"
+fi  
+
+if [ ! -f "$BUILDDIR/.configure-libtool.stamp" ]; then
+    mkdir -p "$BUILDDIR/libtool"
+    cd "$BUILDDIR/libtool"
+
+    start_section "Configure libtool"
+    ../../libtool-strata/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-ltdl-install
+    end_section
+
+    touch "$BUILDDIR/.configure-libtool.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-libtool.stamp" ]; then
+    cd "$BUILDDIR/libtool"
+
+    start_section "Make libtool"
+    OLD_PATH="$PATH"
+    if [ "$OSNAME" == "Darwin" ]; then
+        export PATH="$PATH:/opt/homebrew/bin"
+    fi
+    make -j"$PARALLEL"
+    export PATH="$OLD_PATH"
+    end_section
+
+    start_section "Install libtool"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-libtool.stamp"
+fi
+
+export LIBTOOL="$PKGBUILDDIR/$PREFIX/bin/libtool"
+export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/bin/libtoolize"
+
+if [ ! -f "$BUILDDIR/.patch-gnulib.stamp" ]; then
+    start_section "Patch gnulib"
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/gnulib/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/gnulib/build-aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-gnulib.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-gmp.stamp" ]; then
+    cd "$BUILDDIR/gmp-src"
+
+    start_section "Patch gmp"
+    patch -p1 < "$ROOT/patches/gmp-$GMP_VERSION.patch"
+
+    ACLOCAL="true" \
+    AUTOMAKE="$AUTOMAKE_1_15_HOST" \
+    AUTOCONF="$AUTOCONF_2_69_HOST" \
+    "$AUTORECONF_2_69_HOST"
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/gmp-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/gmp-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-gmp.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-mpfr.stamp" ]; then
+    cd "$BUILDDIR/mpfr-src"
+
+    start_section "Patch mpfr"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/mpfr-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/mpfr-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-mpfr.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-mpc.stamp" ]; then
+    cd "$BUILDDIR/mpc-src"
+
+    start_section "Patch mpc"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    AUTOMAKE="$AUTOMAKE_1_15_HOST" \
+    AUTOCONF="$AUTOCONF_2_69_HOST" \
+    "$AUTORECONF_2_69_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/mpc-src/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/mpc-src/build-aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-mpc.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-nettle.stamp" ]; then
+    cd "$BUILDDIR/nettle-src"
+
+    start_section "Patch nettle"
+    patch -p1 < "$ROOT/patches/nettle-$NETTLE_VERSION.patch"
+
+    ACLOCAL="true" \
+    AUTOMAKE="$AUTOMAKE_1_15_HOST" \
+    AUTOCONF="$AUTOCONF_2_69_HOST" \
+    "$AUTORECONF_2_69_HOST"
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/nettle-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/nettle-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-nettle.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libsodium.stamp" ]; then
+    cd "$BUILDDIR/libsodium-src"
+    
+    start_section "Patch libsodium"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libsodium-src/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libsodium-src/build-aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-libsodium.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libffi.stamp" ]; then
+    cd "$BUILDDIR/libffi-src"
+
+    start_section "Patch libffi"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libffi-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libffi-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-libffi.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libuv.stamp" ]; then
+    cd "$BUILDDIR/libuv-src"
+
+    start_section "Patch libuv"
+    OLD_PATH="$PATH"
+    if [ "$OSNAME" == "Darwin" ]; then
+        export PATH="/opt/homebrew/bin:$PATH"
+    fi
+    ./autogen.sh
+    export PATH="$OLD_PATH"
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libuv-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libuv-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-libuv.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libxml2.stamp" ]; then
+    cd "$BUILDDIR/libxml2-src"
+    
+    start_section "Patch libxml2"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libxml2-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libxml2-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-libxml2.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libxslt.stamp" ]; then
+    cd "$BUILDDIR/libxslt-src"
+
+    start_section "Patch libxslt"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libxslt-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libxslt-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-libxslt.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libexpat.stamp" ]; then
+    cd "$BUILDDIR/libexpat-src"
+
+    start_section "Patch libexpat"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libexpat-src/conftools"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libexpat-src/conftools"
+    end_section
+
+    touch "$BUILDDIR/.patch-libexpat.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-zlib.stamp" ]; then
+    cd "$BUILDDIR/zlib-src"
+
+    start_section "Patch zlib"
+    patch -p1 < "$ROOT/patches/zlib-$ZLIB_VERSION.patch"
+    end_section
+
+    touch "$BUILDDIR/.patch-zlib.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-bzip2.stamp" ]; then
+    cd "$BUILDDIR/bzip2-src"
+
+    start_section "Patch bzip2"
+    patch -p1 < "$ROOT/patches/bzip2-$BZIP2_VERSION.patch"
+    end_section
+
+    touch "$BUILDDIR/.patch-bzip2.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-xz.stamp" ]; then
+    cd "$BUILDDIR/xz-src"
+
+    start_section "Patch xz"
+    "$LIBTOOLIZE" --force --copy
+
+    OLD_PATH="$PATH"
+    if [ "$OSNAME" == "Darwin" ]; then
+        export PATH="$PATH:/opt/homebrew/bin"
+    fi
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+    export PATH="$OLD_PATH"
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/xz-src/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/xz-src/build-aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-xz.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-lz4.stamp" ]; then
+    cd "$BUILDDIR/lz4-src"
+
+    start_section "Patch lz4"
+    patch -p1 < "$ROOT/patches/lz4-$LZ4_VERSION.patch"
+    end_section
+
+    touch "$BUILDDIR/.patch-lz4.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-zstd.stamp" ]; then
+    cd "$BUILDDIR/zstd-src"
+
+    start_section "Patch zstd"
+    patch -p1 < "$ROOT/patches/zstd-$ZSTD_VERSION.patch"
+    end_section
+
+    touch "$BUILDDIR/.patch-zstd.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libarchive.stamp" ]; then
+    cd "$BUILDDIR/libarchive-src"
+
+    start_section "Patch libarchive"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_HOST" \
+    AUTOMAKE="$AUTOMAKE_HOST" \
+    AUTOCONF="$AUTOCONF_HOST" \
+    "$AUTORECONF_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libarchive-src/build/autoconf"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libarchive-src/build/autoconf"
+    if [ "$SED_TYPE" == "bsd" ]; then
+        sed -i '' \
+            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
+            "$BUILDDIR/libarchive-src/libarchive/archive_hmac.c"
+    else
+        sed -i \
+            's/hmac_sha1_digest(ctx, (unsigned)\*out_len, out)/hmac_sha1_digest(ctx, out)/g' \
+            "$BUILDDIR/libarchive-src/libarchive/archive_hmac.c"
+    fi
+    end_section
+
+    touch "$BUILDDIR/.patch-libarchive.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-libiconv.stamp" ]; then
+    start_section "Patch libiconv"
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libiconv-src/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libiconv-src/build-aux"
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libiconv-src/libcharset/build-aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libiconv-src/libcharset/build-aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-libiconv.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-ncurses.stamp" ]; then
+    cd "$BUILDDIR/ncurses-src"
+
+    start_section "Patch ncurses"
+    "$LIBTOOLIZE" --force --copy
+    
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/ncurses-src"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/ncurses-src"
+    end_section
+
+    touch "$BUILDDIR/.patch-ncurses.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-editline.stamp" ]; then
+    cd "$BUILDDIR/editline-src"
+
+    start_section "Patch editline"
+    "$LIBTOOLIZE" --force --copy
+
+    ACLOCAL="$ACLOCAL_1_15_HOST" \
+    AUTOMAKE="$AUTOMAKE_1_15_HOST" \
+    AUTOCONF="$AUTOCONF_2_69_HOST" \
+    "$AUTORECONF_2_69_HOST" -ivf
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/editline-src/aux"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/editline-src/aux"
+    end_section
+
+    touch "$BUILDDIR/.patch-editline.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-readline.stamp" ]; then
+    cd "$BUILDDIR/readline-src"
+
+    start_section "Patch readline"
+    patch -p1 < "$ROOT/patches/readline-$READLINE_VERSION.patch"
+
+    cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/readline-src/support"
+    cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/readline-src/support"
+    end_section
+
+    touch "$BUILDDIR/.patch-readline.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.patch-sqlite3.stamp" ]; then
+    start_section "Patch sqlite3"
+    cp -f "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/sqlite3-src/autosetup/autosetup-config.sub"
+    cp -f "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/sqlite3-src/autosetup/autosetup-config.guess"
+    end_section
+
+    touch "$BUILDDIR/.patch-sqlite3.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.configure-pkgconfig.stamp" ]; then
+    mkdir -p "$BUILDDIR/pkgconfig"
+    cd "$BUILDDIR/pkgconfig"
+
+    start_section "Configure pkgconfig"
+    CFLAGS="-Wno-error=int-conversion" \
+    ../pkgconfig-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --with-internal-glib \
+        --disable-host-tool \
+        --disable-debug
+    end_section
+
+    touch "$BUILDDIR/.configure-pkgconfig.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-pkgconfig.stamp" ]; then
+    cd "$BUILDDIR/pkgconfig"
+
+    start_section "Make pkgconfig"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install pkgconfig"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-pkgconfig.stamp"
 fi
 
 if [ ! -f "$BUILDDIR/.configure-zlib.stamp" ]; then
@@ -378,21 +800,81 @@ if [ ! -f "$BUILDDIR/.build-ncurses.stamp" ]; then
     make -j"$PARALLEL" -C progs tic
     end_section
 
-
     touch "$BUILDDIR/.build-ncurses.stamp"
 fi
 
-HOST_TIC="$BUILDDIR/ncurses/progs/tic"
+export TIC="$BUILDDIR/ncurses/progs/tic"
+
+if [ ! -f "$BUILDDIR/.configure-cmake.stamp" ]; then
+    mkdir -p "$BUILDDIR/cmake"
+    cd "$BUILDDIR/cmake"
+
+    start_section "Configure cmake"
+    ../../cmake-strata/bootstrap --prefix="$PREFIX"
+    end_section
+
+    touch "$BUILDDIR/.configure-cmake.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-cmake.stamp" ]; then
+    cd "$BUILDDIR/cmake"
+
+    start_section "Make cmake"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install cmake"
+    make install DESTDIR="$PKGBUILDDIR"
+    end_section
+
+    touch "$BUILDDIR/.build-cmake.stamp"
+fi
+
+export CMAKE="$PKGBUILDDIR/$PREFIX/bin/cmake"
+export CCMAKE="$PKGBUILDDIR/$PREFIX/bin/ccmake"
+export CTEST="$PKGBUILDDIR/$PREFIX/bin/ctest"
+export CPACK="$PKGBUILDDIR/$PREFIX/bin/cpack"
+
+if [ ! -f "$BUILDDIR/.configure-sidlc.stamp" ]; then
+    mkdir -p "$BUILDDIR/sidlc"
+    cd "$BUILDDIR/sidlc"
+
+    start_section "Configure sidlc"
+    "$CMAKE" -S../../sidlc -B. \
+        -DCMAKE_INSTALL_PREFIX="$PREFIX"
+    end_section
+
+    touch "$BUILDDIR/.configure-sidlc.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-sidlc.stamp" ]; then
+    cd "$BUILDDIR/sidlc"
+
+    start_section "Make sidlc"
+    "$CMAKE" --build . --parallel="$PARALLEL"
+    end_section
+
+    start_section "Install sidlc"
+    DESTDIR="$PKGBUILDDIR" \
+    "$CMAKE" --install .
+    end_section
+
+    touch "$BUILDDIR/.build-sidlc.stamp"
+fi
+
+unset LIBTOOL
+unset LIBTOOLIZE
 
 ROOT_CPPFLAGS="$CPPFLAGS"
 ROOT_LDFLAGS="$LDFLAGS"
+ROOT_PATH="$PATH"
+
 for ARCH in "${ARCHS[@]}"; do
     # Per-Target Build Settings
     TARGET="$ARCH-strata-folios"
     SYSROOT="$PREFIX/$TARGET/sysroot"
 
-    mkdir -p "$PKGBUILDDIR/$SYSROOT"
-
+    export PATH="$ROOT_PATH"
     export CPPFLAGS="-I$PKGBUILDDIR/$SYSROOT/include $ROOT_CPPFLAGS"
     export LDFLAGS="-L$PKGBUILDDIR/$SYSROOT/lib $ROOT_LDFLAGS"
     export PKG_CONFIG_PATH=""
@@ -401,6 +883,8 @@ for ARCH in "${ARCHS[@]}"; do
     export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
     export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
 
+    mkdir -p "$PKGBUILDDIR/$SYSROOT"
+    
     # Per-Target Builds
     if [ ! -f "$BUILDDIR/.configure-binutils-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/binutils-$ARCH"
@@ -518,16 +1002,69 @@ for ARCH in "${ARCHS[@]}"; do
         make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
         end_section
 
-        echo "GROUP ( libc.a )" > "$PKGBUILDDIR/$SYSROOT/usr/lib/libc.so"
-
         touch "$BUILDDIR/.build-musl-pass1-$ARCH.stamp"
     fi
+
+    if [ ! -f "$BUILDDIR/.configure-libtool-pass1-$ARCH.stamp" ]; then
+        mkdir -p "$BUILDDIR/libtool-pass1-$ARCH"
+        cd "$BUILDDIR/libtool-pass1-$ARCH"
+
+        start_section "Configure libtool (pass1)"
+        OLD_PATH="$PATH"
+        if [ "$OSNAME" == "Darwin" ]; then
+            export PATH="$PATH:/opt/homebrew/bin"
+        fi
+        CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
+        CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
+        AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o" \
+        NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
+        AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as" \
+        LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
+        STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip" \
+        RANLIB="true" \
+        ../../libtool-strata/configure \
+            --prefix="$PKGBUILDDIR/$PREFIX" \
+            --exec-prefix="$PKGBUILDDIR/$PREFIX/$TARGET" \
+            --host="$TARGET" \
+            --enable-ltdl-install \
+            --enable-shared \
+            --enable-static
+
+        export PATH="$OLD_PATH"
+        end_section
+
+        touch "$BUILDDIR/.configure-libtool-pass1-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.build-libtool-pass1-$ARCH.stamp" ]; then
+        cd "$BUILDDIR/libtool-pass1-$ARCH"
+
+        start_section "Make libtool (pass1)"
+        OLD_PATH="$PATH"
+        if [ "$OSNAME" == "Darwin" ]; then
+            export PATH="$PATH:/opt/homebrew/bin"
+        fi
+        make -j"$PARALLEL" V=1
+        export PATH="$OLD_PATH"
+        end_section
+
+        start_section "Install libtool (pass1)"
+        make install
+        end_section
+
+        touch "$BUILDDIR/.build-libtool-pass1-$ARCH.stamp"
+    fi
+
+    export LIBTOOL="$PKGBUILDDIR/$PREFIX/$TARGET/bin/libtool"
+    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/$TARGET/bin/libtoolize"
 
     if [ ! -f "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gcc-pass2-$ARCH"
         cd "$BUILDDIR/gcc-pass2-$ARCH"
 
         start_section "Configure GCC (pass2)"
+        AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o" \
+        RANLIB_FOR_TARGET="true" \
         LDFLAGS="$LDFLAGS -s" \
         ../../gcc-strata/configure \
             --target="$TARGET" \
@@ -549,7 +1086,7 @@ for ARCH in "${ARCHS[@]}"; do
             --enable-libatomic \
             --enable-libquadmath
         end_section
-        
+
         touch "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp"
     fi
 
@@ -557,7 +1094,7 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/gcc-pass2-$ARCH"
 
         start_section "Make GCC (pass2)"
-        make -j"$PARALLEL" all-gcc
+        make -j"$PARALLEL" all-gcc 
         end_section
 
         start_section "Make GCC (pass2) - libgcc"
@@ -573,7 +1110,8 @@ for ARCH in "${ARCHS[@]}"; do
         end_section
 
         start_section "Make GCC (pass2) - libstdc++"
-        make -j"$PARALLEL" all-target-libstdc++-v3
+        make -j"$PARALLEL" all-target-libstdc++-v3 \
+            LDFLAGS_FOR_TARGET="-L$PKGBUILDDIR/$PREFIX/$TARGET/lib"
         end_section
 
         start_section "Install GCC (pass2) - libstdc++"
@@ -584,6 +1122,18 @@ for ARCH in "${ARCHS[@]}"; do
         cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
 
         touch "$BUILDDIR/.build-gcc-pass2-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.cleanup-pass1-$ARCH.stamp" ]; then
+        cd "$PKGBUILDDIR"
+
+        find "./$PREFIX/lib/" -name "*.a" -delete
+        find "./$PREFIX/lib/" -name "*.so*" -delete
+
+        find "./$SYSROOT/usr/lib/" -name "*.a" -delete
+        find "./$SYSROOT/usr/lib/" -name "*.so*" -delete
+
+        touch "$BUILDDIR/.cleanup-pass1-$ARCH.stamp"
     fi
 
     if [ ! -f "$BUILDDIR/.configure-musl-pass2-$ARCH.stamp" ]; then
@@ -620,14 +1170,16 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-musl-pass2-$ARCH.stamp"
     fi
 
+    export PATH="$PKGBUILDDIR/$PREFIX/$TARGET/bin:$ROOT_PATH"
     export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
     export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
-    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ar"
-    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm"
+    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o"
     export AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as"
+    export OBJCOPY="$PKGBUILDDIR/$PREFIX/bin/$TARGET-objcopy"
     export LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld"
+    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm"
     export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip"
-    export RANLIB="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ranlib"
+    export RANLIB="true"
 
     if [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gmp-$ARCH"
@@ -741,11 +1293,11 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/nettle-$ARCH"
 
         start_section "Make Nettle"
-        make -j"$PARALLEL"
+        make -j"$PARALLEL" AUTOHEADER="$AUTOHEADER_HOST"
         end_section
 
         start_section "Install Nettle"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        make install DESTDIR="$PKGBUILDDIR/$SYSROOT" AUTOHEADER="$AUTOHEADER_HOST"
         end_section
 
         touch "$BUILDDIR/.build-nettle-$ARCH.stamp"
@@ -766,12 +1318,12 @@ for ARCH in "${ARCHS[@]}"; do
 
         touch "$BUILDDIR/.configure-libsodium-$ARCH.stamp"
     fi
-
+    
     if [ ! -f "$BUILDDIR/.build-libsodium-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libsodium-$ARCH"
 
         start_section "Make libsodium"
-        make -j"$PARALLEL"
+        make -j"$PARALLEL" V=1
         end_section
 
         start_section "Install libsodium"
@@ -935,68 +1487,37 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libexpat-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH-shared.stamp" ]; then
-        mkdir -p "$BUILDDIR/yyjson-$ARCH-shared"
-        cd "$BUILDDIR/yyjson-$ARCH-shared"
+    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH.stamp" ]; then
+        mkdir -p "$BUILDDIR/yyjson-$ARCH"
+        cd "$BUILDDIR/yyjson-$ARCH"
 
         start_section "Configure yyjson"
         "$CMAKE" -S../yyjson-src -B. \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_SYSTEM_PROCESSOR="$ARCH" \
-            -DCMAKE_C_COMPILER="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
+            -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/$TARGET.cmake" \
+            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$PREFIX" \
             -DCMAKE_INSTALL_PREFIX="/usr" \
-            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$SYSROOT" \
-            -DBUILD_SHARED_LIBS=ON \
-            -DYYJSON_BUILD_TESTS=OFF
-        end_section
-
-        touch "$BUILDDIR/.configure-yyjson-$ARCH-shared.stamp"
-    fi
-
-    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH-shared.stamp" ]; then
-        cd "$BUILDDIR/yyjson-$ARCH-shared"
-
-        start_section "Make yyjson"
-        make -j"$PARALLEL"
-        end_section
-
-        start_section "Install yyjson"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
-        end_section
-
-        touch "$BUILDDIR/.build-yyjson-$ARCH-shared.stamp"
-    fi
-
-    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH-static.stamp" ]; then
-        mkdir -p "$BUILDDIR/yyjson-$ARCH-static"
-        cd "$BUILDDIR/yyjson-$ARCH-static"
-
-        start_section "Configure yyjson"
-        "$CMAKE" -S../yyjson-src -B. \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_SYSTEM_PROCESSOR="$ARCH" \
-            -DCMAKE_C_COMPILER="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-            -DCMAKE_INSTALL_PREFIX="/usr" \
-            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$SYSROOT" \
+            -DCMAKE_SYSROOT="$PKGBUILDDIR/$SYSROOT" \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DYYJSON_BUILD_TESTS=OFF
         end_section
 
-        touch "$BUILDDIR/.configure-yyjson-$ARCH-static.stamp"
+        touch "$BUILDDIR/.configure-yyjson-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH-static.stamp" ]; then
-        cd "$BUILDDIR/yyjson-$ARCH-static"
+    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH.stamp" ]; then
+        cd "$BUILDDIR/yyjson-$ARCH"
 
         start_section "Make yyjson"
-        make -j"$PARALLEL"
+        "$CMAKE" --build . --parallel="$PARALLEL"
         end_section
 
         start_section "Install yyjson"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        DESTDIR="$PKGBUILDDIR/$SYSROOT" \
+        "$CMAKE" --install .
         end_section
 
-        touch "$BUILDDIR/.build-yyjson-$ARCH-static.stamp"
+        touch "$BUILDDIR/.build-yyjson-$ARCH.stamp"
     fi
 
     if [ ! -f "$BUILDDIR/.configure-zlib-$ARCH.stamp" ]; then
@@ -1004,9 +1525,8 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/zlib-$ARCH"
 
         start_section "Configure zlib"
-        CHOST="$TARGET" \
-        ../zlib-src/configure \
-            --prefix="/usr"
+        rm -rf -- *
+        cp -r ../zlib-src/* .
         end_section
 
         touch "$BUILDDIR/.configure-zlib-$ARCH.stamp"
@@ -1016,11 +1536,14 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/zlib-$ARCH"
 
         start_section "Make zlib"
-        make -j"$PARALLEL"
+        make -f "./folios/Makefile.gcc" -j"$PARALLEL" \
+            CROSS_PREFIX="$TARGET-" \
+            CFLAGS="-I. $CPPFLAGS"
         end_section
 
         start_section "Install zlib"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        make -f "./folios/Makefile.gcc" install \
+            DESTDIR="$PKGBUILDDIR/$SYSROOT"
         end_section
 
         touch "$BUILDDIR/.build-zlib-$ARCH.stamp"
@@ -1042,15 +1565,19 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/bzip2-$ARCH"
 
         start_section "Make bzip2"
-        make libbz2.a bzip2 bzip2recover -j"$PARALLEL" \
-            PREFIX="/usr" \
+        make bz2.sl bzip2.app bzip2recover.app -j"$PARALLEL" PREFIX="/usr" \
             CC="$CC" \
-            AR="$AR" \
-            RANLIB="$RANLIB"
+            LD="$LD"
+        make -f Makefile-bz2_dl -j"$PARALLEL" PREFIX="/usr" \
+            CC="$CC" \
+            LD="$LD"
         end_section
 
         start_section "Install bzip2"
-        make install PREFIX="$PKGBUILDDIR/$SYSROOT/usr"
+        make install PREFIX="$PKGBUILDDIR/$SYSROOT/usr" \
+            CC="$CC" \
+            LD="$LD"
+        cp -f bz2.dl* "$PKGBUILDDIR/$SYSROOT/usr/lib/"
         end_section
 
         touch "$BUILDDIR/.build-bzip2-$ARCH.stamp"
@@ -1105,19 +1632,17 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Make lz4 library"
         make -j"$PARALLEL" \
             PREFIX="/usr" \
-            TARGET_OS=Linux \
+            TARGET_OS=foliOS \
             CC="$CC" \
-            AR="$AR" \
             NM="$NM" \
-            LD="$LD" \
-            RANLIB="$RANLIB"
+            LD="$LD" V=1
         end_section
 
         start_section "Install lz4"
         make install \
             PREFIX="/usr" \
-            TARGET_OS=Linux \
-            DESTDIR="$PKGBUILDDIR/$SYSROOT"
+            TARGET_OS=foliOS \
+            DESTDIR="$PKGBUILDDIR/$SYSROOT" V=1
         end_section
 
         touch "$BUILDDIR/.build-lz4-$ARCH.stamp"
@@ -1141,13 +1666,12 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Make zstd library"
         make -j"$PARALLEL" \
             PREFIX="/usr" \
-            TARGET_SYSTEM=Linux \
-            UNAME_TARGET_SYSTEM=Linux \
+            OS=foliOS \
+            TARGET_SYSTEM=foliOS \
+            UNAME_TARGET_SYSTEM=foliOS \
             CC="$CC" \
-            AR="$AR" \
             NM="$NM" \
             LD="$LD" \
-            RANLIB="$RANLIB" \
             CPPFLAGS="$CPPFLAGS -fPIC" \
             LDFLAGS="$LDFLAGS -shared" \
             ZSTD_LIB_ZLIB=1 \
@@ -1158,8 +1682,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Install zstd"
         make install \
             PREFIX="/usr" \
-            TARGET_SYSTEM=Linux \
-            UNAME_TARGET_SYSTEM=Linux \
+            OS=foliOS \
+            TARGET_SYSTEM=foliOS \
+            UNAME_TARGET_SYSTEM=foliOS \
             DESTDIR="$PKGBUILDDIR/$SYSROOT"
         end_section
 
@@ -1218,6 +1743,9 @@ for ARCH in "${ARCHS[@]}"; do
             --prefix="/usr" \
             --enable-shared \
             --enable-static
+
+        cp "$BUILDDIR/libtool-pass1-$ARCH/libtool" "./libtool"
+        cp "$BUILDDIR/libtool-pass1-$ARCH/libtool" "./libcharset/libtool"
         end_section
 
         touch "$BUILDDIR/.configure-libiconv-$ARCH.stamp"
@@ -1227,7 +1755,7 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/libiconv-$ARCH"
 
         start_section "Make libiconv"
-        make -j"$PARALLEL"
+        make -j"$PARALLEL" ARFLAGS="" RANLIB="true"
         end_section
 
         start_section "Install libiconv"
@@ -1247,9 +1775,10 @@ for ARCH in "${ARCHS[@]}"; do
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --host="$TARGET" \
             --prefix="/usr" \
+            --with-libtool \
             --with-build-cc=gcc \
             --with-pkg-config-libdir="/usr/lib/pkgconfig" \
-            --with-tic-path="$HOST_TIC" \
+            --with-tic-path="$TIC" \
             --without-ada \
             --disable-mixed-case \
             --disable-db-install \
@@ -1267,12 +1796,13 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/ncurses-$ARCH"
 
         start_section "Make ncurses"
-        make -j"$PARALLEL"
+        make -j"$PARALLEL" ARFLAGS="" RANLIB="true" LIBTOOL="$LIBTOOL"
         end_section
 
         start_section "Install ncurses"
         make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
-        ln -sf libncursesw.so "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.so"
+        ln -sf libncursesw.dl "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl"
+        mv "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl" "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl"
         end_section
         
         touch "$BUILDDIR/.build-ncurses-$ARCH.stamp"
@@ -1336,7 +1866,7 @@ for ARCH in "${ARCHS[@]}"; do
         end_section
 
         start_section "Install readline"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        make install DESTDIR="$PKGBUILDDIR/$SYSROOT" V=1
         end_section
         
         touch "$BUILDDIR/.build-readline-$ARCH.stamp"
@@ -1356,6 +1886,9 @@ for ARCH in "${ARCHS[@]}"; do
             --soname=none \
             --with-readline-ldflags="-L$PKGBUILDDIR/$SYSROOT/usr/lib -lreadline -lncursesw" \
             --with-readline-cflags="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
+            --dll-basename="sqlite3" \
+            AR="$LD -r -o" \
+            RANLIB="true" \
             LIBS="-lm -ldl"
         end_section
 
@@ -1366,16 +1899,122 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/sqlite3-$ARCH"
 
         start_section "Make sqlite3"
-        make -j"$PARALLEL"
+        make -j"$PARALLEL" AR.flags="" T.exe=".app" T.dll=".dl" T.lib=".sl"
         end_section
 
         start_section "Install sqlite3"
-        make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+        make install DESTDIR="$PKGBUILDDIR/$SYSROOT" \
+            AR.flags="" T.exe=".app" T.dll=".dl" T.lib=".sl"
         end_section
         
         touch "$BUILDDIR/.build-sqlite3-$ARCH.stamp"
     fi
+
+    if [ ! -f "$BUILDDIR/.uninstall-libtool-pass1-$ARCH.stamp" ]; then
+        cd "$BUILDDIR/libtool-pass1-$ARCH"
+
+        start_section "Uninstalling libtool (pass1)"
+        make uninstall
+        end_section
+
+        touch "$BUILDDIR/.uninstall-libtool-pass1-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.configure-libtool-pass2-$ARCH.stamp" ]; then
+        mkdir -p "$BUILDDIR/libtool-pass2-$ARCH"
+        cd "$BUILDDIR/libtool-pass2-$ARCH"
+
+        start_section "Configure libtool (pass2)"
+        OLD_PATH="$PATH"
+        if [ "$OSNAME" == "Darwin" ]; then
+            export PATH="$PATH:/opt/homebrew/bin"
+        fi
+        ../../libtool-strata/configure \
+            --prefix="$PREFIX" \
+            --exec-prefix="$PREFIX/$TARGET" \
+            --host="$TARGET" \
+            --enable-ltdl-install \
+            --enable-shared \
+            --enable-static
+
+        export PATH="$OLD_PATH"
+        end_section
+
+        touch "$BUILDDIR/.configure-libtool-pass2-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp" ]; then
+        cd "$BUILDDIR/libtool-pass2-$ARCH"
+
+        start_section "Make libtool (pass2)"
+        OLD_PATH="$PATH"
+        if [ "$OSNAME" == "Darwin" ]; then
+            export PATH="$PATH:/opt/homebrew/bin"
+        fi
+        make -j"$PARALLEL" V=1
+        export PATH="$OLD_PATH"
+        end_section
+
+        start_section "Install libtool (pass2)"
+        make install DESTDIR="$PKGBUILDDIR"
+        ln -s "../$TARGET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET-libtool"
+        ln -s "../$TARGET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET-libtoolize"
+        end_section
+
+        touch "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp"
+    fi
+
+    unset PATH
+    unset CPPFLAGS
+    unset LDFLAGS
+    unset PKG_CONFIG_PATH
+    unset PKG_CONFIG_LIBDIR
+    unset PKG_CONFIG_SYSROOT_DIR
+    unset PKG_CONFIG_ALLOW_SYSTEM_CFLAGS
+    unset PKG_CONFIG_ALLOW_SYSTEM_LIBS
+    unset LIBTOOL
+    unset LIBTOOLIZE
+    unset CC
+    unset CXX
+    unset AR
+    unset AS
+    unset OBJCOPY
+    unset LD
+    unset NM
+    unset STRIP
+    unset RANLIB
 done
+
+export PATH="$ROOT_PATH"
+
+if [ ! -f "$BUILDDIR/.uninstall-libtool.stamp" ]; then
+    cd "$BUILDDIR/libtool"
+
+    start_section "Uninstalling libtool"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-libtool.stamp"
+fi
+
+
+if [ ! -f "$BUILDDIR/.cleanup.stamp" ]; then
+    cd "$PKGBUILDDIR/$PREFIX"
+
+    start_section "Cleanup files & build paths"
+    find . -name "*.la" -delete
+    if [ "$SED_TYPE" == "bsd" ]; then
+        LC_CTYPE=C find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
+            -exec sed -i '' "s|$PKGBUILDDIR||g" {} +
+    else
+        find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
+            -exec sed -i "s|$PKGBUILDDIR||g" {} +
+    fi
+    end_section
+
+    touch "$BUILDDIR/.cleanup.stamp"
+fi
+
 
 if [ ! -f "$BUILDDIR/.archive.stamp" ]; then
     cd "$PKGBUILDDIR/$PREFIX"

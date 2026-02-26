@@ -1,0 +1,231 @@
+diff --color -Naru lz4-src.orig/Makefile lz4-src/Makefile
+--- lz4-src.orig/Makefile	2026-02-23 20:28:43
++++ lz4-src/Makefile	2026-02-23 20:46:15
+@@ -51,13 +51,13 @@
+ .PHONY: allmost
+ allmost: lib lz4
+ 
+-.PHONY: lib lib-release liblz4.a
+-lib: liblz4.a
+-lib lib-release liblz4.a:
++.PHONY: lib lib-release lz4.sl
++lib: lz4.sl
++lib lib-release lz4.sl:
+ 	$(MAKE) -C $(LZ4DIR) $@
+ 
+ .PHONY: lz4 lz4-release
+-lz4 : liblz4.a
++lz4 : lz4.sl
+ lz4-release : lib-release
+ lz4 lz4-release :
+ 	$(MAKE) -C $(PRGDIR) $@
+@@ -65,7 +65,7 @@
+ 	echo lz4 build completed
+ 
+ .PHONY: examples
+-examples: liblz4.a
++examples: lz4.sl
+ 	$(MAKE) -C $(EXDIR) all
+ 
+ .PHONY: manuals
+diff --color -Naru lz4-src.orig/Makefile.inc lz4-src/Makefile.inc
+--- lz4-src.orig/Makefile.inc	2026-02-23 20:28:43
++++ lz4-src/Makefile.inc	2026-02-23 21:19:17
+@@ -55,9 +55,15 @@
+ LIBLZ4_NAME = cyglz4-$(LIBVER_MAJOR)
+ WINBASED    = yes
+       else
++        ifneq (,$(filter foliOS%,$(TARGET_OS)))
++LIBLZ4_NAME = lz4
++WINBASED    = no
++EXT         = .app
++        else
+ LIBLZ4_NAME = liblz4
+ WINBASED    = no
+ EXT         =
++        endif
+       endif
+     endif
+   endif
+diff --color -Naru lz4-src.orig/examples/Makefile lz4-src/examples/Makefile
+--- lz4-src.orig/examples/Makefile	2026-02-23 20:28:43
++++ lz4-src/examples/Makefile	2026-02-23 20:46:15
+@@ -35,14 +35,14 @@
+ CFLAGS     = $(WFLAGS) -O2 $(USERCFLAGS)
+ 
+ TESTFILE   = Makefile
+-SLIBLZ4   := $(LIBDIR)/liblz4.a
++SLIBLZ4   := $(LIBDIR)/lz4.sl
+ LZ4DIR     = ../programs
+ LZ4        = $(LZ4DIR)/lz4
+ 
+ default: all
+ 
+ $(SLIBLZ4): $(LIBDIR)/lz4.c $(LIBDIR)/lz4hc.c $(LIBDIR)/lz4frame.c $(LIBDIR)/lz4.h $(LIBDIR)/lz4hc.h $(LIBDIR)/lz4frame.h $(LIBDIR)/lz4frame_static.h
+-	$(MAKE) -j -C $(LIBDIR) liblz4.a
++	$(MAKE) -j -C $(LIBDIR) lz4.sl
+ 
+ ALL = print_version \
+ 	  simple_buffer \
+diff --color -Naru lz4-src.orig/lib/Makefile lz4-src/lib/Makefile
+--- lz4-src.orig/lib/Makefile	2026-02-23 20:28:43
++++ lz4-src/lib/Makefile	2026-02-23 21:19:50
+@@ -64,16 +64,23 @@
+ 	SHARED_EXT = dylib
+ 	SHARED_EXT_MAJOR = $(LIBVER_MAJOR).$(SHARED_EXT)
+ 	SHARED_EXT_VER = $(LIBVER).$(SHARED_EXT)
+-	SONAME_FLAGS = -install_name $(libdir)/liblz4.$(SHARED_EXT_MAJOR) -compatibility_version $(LIBVER_MAJOR) -current_version $(LIBVER) -dynamiclib
++	SONAME_FLAGS = -install_name $(libdir)/lz4.$(SHARED_EXT_MAJOR) -compatibility_version $(LIBVER_MAJOR) -current_version $(LIBVER) -dynamiclib
+ else
+-	ifeq ($(WINBASED),yes)
+-		SHARED_EXT = dll
+-		SHARED_EXT_VER = $(SHARED_EXT)
+-	else  # posix non-mac
+-		SONAME_FLAGS = -Wl,-soname=liblz4.$(SHARED_EXT).$(LIBVER_MAJOR)
+-		SHARED_EXT = so
++	ifeq ($(TARGET_OS), foliOS)
++		SONAME_FLAGS = -Wl,-soname=lz4.$(SHARED_EXT).$(LIBVER_MAJOR)
++		SHARED_EXT = dl
+ 		SHARED_EXT_MAJOR = $(SHARED_EXT).$(LIBVER_MAJOR)
+ 		SHARED_EXT_VER = $(SHARED_EXT).$(LIBVER)
++	else  # posix non-mac
++		ifeq ($(WINBASED),yes)
++			SHARED_EXT = dll
++			SHARED_EXT_VER = $(SHARED_EXT)
++		else  # posix non-mac
++			SONAME_FLAGS = -Wl,-soname=lz4.$(SHARED_EXT).$(LIBVER_MAJOR)
++			SHARED_EXT = so
++			SHARED_EXT_MAJOR = $(SHARED_EXT).$(LIBVER_MAJOR)
++			SHARED_EXT_VER = $(SHARED_EXT).$(LIBVER)
++		endif
+ 	endif
+ endif
+ 
+@@ -88,7 +95,7 @@
+ lib-release: lib liblz4.pc
+ 
+ .PHONY: lib
+-lib: liblz4.a liblz4
++lib: lz4.sl liblz4
+ 
+ .PHONY: all
+ all: lib liblz4.pc
+@@ -97,12 +104,12 @@
+ all32: CFLAGS+=-m32
+ all32: all
+ 
+-CLEAN += liblz4.a
+-liblz4.a: $(SRCFILES)
++CLEAN += lz4.sl
++lz4.sl: $(SRCFILES)
+ ifeq ($(BUILD_STATIC),yes)  # can be disabled on command line
+ 	@echo compiling static library
+ 	$(COMPILE.c) $^
+-	$(AR) rcs $@ *.o
++	$(LD) -r -o $@ *.o
+ endif
+ 
+ ifeq ($(WINBASED),yes)
+@@ -133,8 +140,8 @@
+ 	@echo compiling dynamic library $(LIBVER)
+ 	$(CC) $(ALLFLAGS) -shared $^ -fPIC -fvisibility=hidden $(SONAME_FLAGS) -o $@
+ 	@echo creating versioned links
+-	$(LN_SF) $@ liblz4.$(SHARED_EXT_MAJOR)
+-	$(LN_SF) $@ liblz4.$(SHARED_EXT)
++	$(LN_SF) $@ lz4.$(SHARED_EXT_MAJOR)
++	$(LN_SF) $@ lz4.$(SHARED_EXT)
+   endif
+ 
+ endif
+@@ -158,7 +165,7 @@
+ ifeq ($(WINBASED),yes)
+ 	$(RM) *.rc
+ endif
+-	$(RM) $(CLEAN) core *.o *.a
++	$(RM) $(CLEAN) core *.o *.sl
+ 	$(RM) *.$(SHARED_EXT) *.$(SHARED_EXT_MAJOR) *.$(SHARED_EXT_VER)
+ 	@echo Cleaning library completed
+ 
+@@ -199,7 +206,7 @@
+ 	$(INSTALL_DATA) liblz4.pc $(DESTDIR)$(pkgconfigdir)/
+ 	@echo Installing libraries in $(DESTDIR)$(libdir)
+   ifeq ($(BUILD_STATIC),yes)
+-	$(INSTALL_DATA) liblz4.a $(DESTDIR)$(libdir)/liblz4.a
++	$(INSTALL_DATA) lz4.sl $(DESTDIR)$(libdir)/lz4.sl
+ 	$(INSTALL_DATA) lz4frame_static.h $(DESTDIR)$(includedir)/lz4frame_static.h
+ 	$(INSTALL_DATA) lz4file.h $(DESTDIR)$(includedir)/lz4file.h
+   endif
+@@ -211,9 +218,9 @@
+ 	$(INSTALL_PROGRAM) $(LIBLZ4) $(DESTDIR)$(bindir)
+ 	$(INSTALL_PROGRAM) $(LIBLZ4_EXP) $(DESTDIR)$(libdir)
+     else
+-	$(INSTALL_PROGRAM) liblz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)
+-	$(LN_SF) liblz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)/liblz4.$(SHARED_EXT_MAJOR)
+-	$(LN_SF) liblz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)/liblz4.$(SHARED_EXT)
++	$(INSTALL_PROGRAM) lz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)
++	$(LN_SF) lz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)/lz4.$(SHARED_EXT_MAJOR)
++	$(LN_SF) lz4.$(SHARED_EXT_VER) $(DESTDIR)$(libdir)/lz4.$(SHARED_EXT)
+     endif
+   endif
+ 	@echo Installing headers in $(DESTDIR)$(includedir)
+@@ -229,11 +236,11 @@
+ 	$(RM) $(DESTDIR)$(bindir)/$(LIBLZ4)
+ 	$(RM) $(DESTDIR)$(libdir)/$(LIBLZ4_EXP)
+   else
+-	$(RM) $(DESTDIR)$(libdir)/liblz4.$(SHARED_EXT)
+-	$(RM) $(DESTDIR)$(libdir)/liblz4.$(SHARED_EXT_MAJOR)
+-	$(RM) $(DESTDIR)$(libdir)/liblz4.$(SHARED_EXT_VER)
++	$(RM) $(DESTDIR)$(libdir)/lz4.$(SHARED_EXT)
++	$(RM) $(DESTDIR)$(libdir)/lz4.$(SHARED_EXT_MAJOR)
++	$(RM) $(DESTDIR)$(libdir)/lz4.$(SHARED_EXT_VER)
+   endif
+-	$(RM) $(DESTDIR)$(libdir)/liblz4.a
++	$(RM) $(DESTDIR)$(libdir)/lz4.sl
+ 	$(RM) $(DESTDIR)$(includedir)/lz4.h
+ 	$(RM) $(DESTDIR)$(includedir)/lz4hc.h
+ 	$(RM) $(DESTDIR)$(includedir)/lz4frame.h
+diff --color -Naru lz4-src.orig/ossfuzz/Makefile lz4-src/ossfuzz/Makefile
+--- lz4-src.orig/ossfuzz/Makefile	2026-02-23 20:28:43
++++ lz4-src/ossfuzz/Makefile	2026-02-23 20:46:15
+@@ -53,8 +53,8 @@
+ 
+ # Include a rule to build the static library if calling this target
+ # directly.
+-$(LZ4DIR)/liblz4.a:
+-	$(MAKE) -C $(LZ4DIR) CFLAGS="$(LZ4_CFLAGS)" liblz4.a
++$(LZ4DIR)/lz4.sl:
++	$(MAKE) -C $(LZ4DIR) CFLAGS="$(LZ4_CFLAGS)" lz4.sl
+ 
+ %.o: %.c
+ 	$(CC) -c $(LZ4_CFLAGS) $(LZ4_CPPFLAGS) $< -o $@
+@@ -65,7 +65,7 @@
+ else
+   LIB_FUZZING_DEPS :=
+ endif
+-%_fuzzer: %_fuzzer.o lz4_helpers.o fuzz_data_producer.o $(LZ4DIR)/liblz4.a $(LIB_FUZZING_DEPS)
++%_fuzzer: %_fuzzer.o lz4_helpers.o fuzz_data_producer.o $(LZ4DIR)/lz4.sl $(LIB_FUZZING_DEPS)
+ 	$(CXX) $(LZ4_CXXFLAGS) $(LZ4_CPPFLAGS) $(LDFLAGS) $(LIB_FUZZING_ENGINE) $^ -o $@$(EXT)
+ 
+ %_fuzzer_clean:
+diff --color -Naru lz4-src.orig/tests/Makefile lz4-src/tests/Makefile
+--- lz4-src.orig/tests/Makefile	2026-02-23 20:28:43
++++ lz4-src/tests/Makefile	2026-02-23 20:46:15
+@@ -88,14 +88,14 @@
+ fullbench : lz4.o lz4hc.o lz4frame.o xxhash.o fullbench.c
+ 	$(CC) $(ALLFLAGS) $^ -o $@$(EXT)
+ 
+-.PHONY: $(LIBDIR)/liblz4.a
+-$(LIBDIR)/liblz4.a:
+-	$(MAKE) -C $(LIBDIR) liblz4.a
++.PHONY: $(LIBDIR)/lz4.sl
++$(LIBDIR)/lz4.sl:
++	$(MAKE) -C $(LIBDIR) lz4.sl
+ 
+ CLEAN += fullbench-lib
+ fullbench-lib : DEBUGLEVEL=0
+ fullbench-lib : CPPFLAGS += -DNDEBUG
+-fullbench-lib: fullbench.c $(LIBDIR)/liblz4.a
++fullbench-lib: fullbench.c $(LIBDIR)/lz4.sl
+ 	$(CC) $(ALLFLAGS) $^ -o $@$(EXT)
+ 
+ # Note: Windows only

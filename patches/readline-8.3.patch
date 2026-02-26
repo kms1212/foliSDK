@@ -1,0 +1,105 @@
+diff --color -Naru readline-src.orig/Makefile.in readline-src/Makefile.in
+--- readline-src.orig/Makefile.in	2026-02-24 04:16:21
++++ readline-src/Makefile.in	2026-02-24 04:17:38
+@@ -111,8 +111,8 @@
+ 	$(CC) -c $(CCFLAGS) $<
+ 
+ # The name of the main library target.
+-LIBRARY_NAME = libreadline.a
+-STATIC_LIBS = libreadline.a libhistory.a
++LIBRARY_NAME = readline.sl
++STATIC_LIBS = readline.sl history.sl
+ 
+ # The C code source files for this library.
+ CSOURCES = $(srcdir)/readline.c $(srcdir)/funmap.c $(srcdir)/keymaps.c \
+@@ -177,15 +177,13 @@
+ 
+ static: $(STATIC_LIBS)
+ 
+-libreadline.a: $(OBJECTS)
++readline.sl: $(OBJECTS)
+ 	$(RM) $@
+-	$(AR) $(ARFLAGS) $@ $(OBJECTS)
+-	-test -n "$(RANLIB)" && $(RANLIB) $@
++	$(LD) -r -o $@ $(OBJECTS)
+ 
+-libhistory.a: $(HISTOBJ) xmalloc.o xfree.o
++history.sl: $(HISTOBJ) xmalloc.o xfree.o
+ 	$(RM) $@
+-	$(AR) $(ARFLAGS) $@ $(HISTOBJ) xmalloc.o xfree.o
+-	-test -n "$(RANLIB)" && $(RANLIB) $@
++	$(LD) -r -o $@ $(HISTOBJ) xmalloc.o xfree.o
+ 
+ # Since tilde.c is shared between readline and bash, make sure we compile
+ # it with the right flags when it's built as part of readline
+@@ -193,8 +191,8 @@
+ 	rm -f $@
+ 	$(CC) $(CCFLAGS) -DREADLINE_LIBRARY -c $(srcdir)/tilde.c
+ 
+-readline: $(OBJECTS) readline.h rldefs.h chardefs.h ./libreadline.a
+-	$(CC) $(CCFLAGS) -DREADLINE_LIBRARY -o $@ $(top_srcdir)/examples/rl.c ./libreadline.a ${TERMCAP_LIB}
++readline: $(OBJECTS) readline.h rldefs.h chardefs.h ./readline.sl
++	$(CC) $(CCFLAGS) -DREADLINE_LIBRARY -o $@ $(top_srcdir)/examples/rl.c ./readline.sl ${TERMCAP_LIB}
+ 
+ lint:	force
+ 	$(MAKE) CCFLAGS='$(GCC_LINT_CFLAGS)' static
+@@ -258,12 +256,10 @@
+ maybe-uninstall-pc: uninstall-pc
+ 
+ install-static: installdirs $(STATIC_LIBS) install-headers install-doc ${install_examples} install-pc
+-	-$(MV) $(DESTDIR)$(libdir)/libreadline.a $(DESTDIR)$(libdir)/libreadline.old
+-	$(INSTALL_DATA) libreadline.a $(DESTDIR)$(libdir)/libreadline.a
+-	-test -n "$(RANLIB)" && $(RANLIB) $(DESTDIR)$(libdir)/libreadline.a
+-	-$(MV) $(DESTDIR)$(libdir)/libhistory.a $(DESTDIR)$(libdir)/libhistory.old
+-	$(INSTALL_DATA) libhistory.a $(DESTDIR)$(libdir)/libhistory.a
+-	-test -n "$(RANLIB)" && $(RANLIB) $(DESTDIR)$(libdir)/libhistory.a
++	-$(MV) $(DESTDIR)$(libdir)/readline.sl $(DESTDIR)$(libdir)/libreadline.old
++	$(INSTALL_DATA) readline.sl $(DESTDIR)$(libdir)/readline.sl
++	-$(MV) $(DESTDIR)$(libdir)/history.sl $(DESTDIR)$(libdir)/libhistory.old
++	$(INSTALL_DATA) history.sl $(DESTDIR)$(libdir)/history.sl
+ 
+ installdirs: $(srcdir)/support/mkinstalldirs
+ 	-$(SHELL) $(srcdir)/support/mkinstalldirs $(DESTDIR)$(includedir) \
+@@ -273,7 +269,7 @@
+ 
+ uninstall: uninstall-headers uninstall-doc uninstall-examples uninstall-pc
+ 	-test -n "$(DESTDIR)$(libdir)" && cd $(DESTDIR)$(libdir) && \
+-		${RM} libreadline.a libreadline.old libhistory.a libhistory.old $(SHARED_LIBS)
++		${RM} readline.sl libreadline.old history.sl libhistory.old $(SHARED_LIBS)
+ 	-( cd shlib; ${MAKE} DESTDIR=${DESTDIR} uninstall )
+ 
+ install-shared: installdirs install-headers shared install-doc install-pc
+diff --color -Naru readline-src.orig/support/shlib-install readline-src/support/shlib-install
+--- readline-src.orig/support/shlib-install	2026-02-24 04:16:21
++++ readline-src/support/shlib-install	2026-02-24 04:32:02
+@@ -118,7 +118,7 @@
+ # Create symlinks to the installed library.  This section is incomplete.
+ #
+ case "$host_os-$host_vendor" in
+-*linux*|freebsd*|dragonfly*)
++*linux*|freebsd*|dragonfly*|strata*-folios*)
+ 	# libname.so.M -> libname.so.M.N
+ 	${echo} ${RM} ${INSTALLDIR}/$LINK2
+ 	if [ -z "$uninstall" ]; then
+diff --color -Naru readline-src.orig/support/shobj-conf readline-src/support/shobj-conf
+--- readline-src.orig/support/shobj-conf	2026-02-24 04:16:21
++++ readline-src/support/shobj-conf	2026-02-24 04:26:55
+@@ -529,6 +529,18 @@
+ 	fi
+ 	;;
+ 
++strata*-folios*)
++	SHOBJ_CFLAGS=-fPIC
++	SHOBJ_LD='${CC}'
++	SHOBJ_LDFLAGS='-shared -Wl,-soname,$@'
++
++	SHLIB_XLDFLAGS='-Wl,-rpath,$(libdir) -Wl,-soname,`basename $@ $(SHLIB_MINOR)`'
++	SHLIB_LIBVERSION='$(SHLIB_LIBSUFF).$(SHLIB_MAJOR)$(SHLIB_MINOR)'
++	
++	SHLIB_LIBSUFF='dl'
++	SHLIB_LIBPREF=
++	;;
++
+ #
+ # Rely on correct gcc configuration for everything else
+ #

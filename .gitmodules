@@ -10,3 +10,18 @@
 	path = musl-strata
 	url = https://github.com/kms1212/musl-strata
 	branch = v1.2.5/strata-folios-support
+[submodule "cmake-strata"]
+	path = cmake-strata
+	url = https://github.com/kms1212/cmake-strata
+[submodule "libtool-strata"]
+	path = libtool-strata
+	url = https://github.com/kms1212/libtool-strata
+[submodule "gnu-config-strata"]
+	path = gnu-config-strata
+	url = https://github.com/kms1212/gnu-config-strata
+[submodule "sidlc"]
+	path = sidlc
+	url = https://github.com/kms1212/sidlc.git
+[submodule "libstrata"]
+	path = libstrata
+	url = https://github.com/kms1212/libstrata.git
