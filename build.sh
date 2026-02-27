@@ -873,8 +873,8 @@ unset LIBTOOL
 unset LIBTOOLIZE
 
 ROOT_PATH="$PATH"
-ROOT_CPPFLAGS="$CPPFLAGS -I$PKGBUILDDIR/$PREFIX/include"
-ROOT_LDFLAGS="$LDFLAGS -L$PKGBUILDDIR/$PREFIX/lib"
+ROOT_CPPFLAGS="$CPPFLAGS"
+ROOT_LDFLAGS="$LDFLAGS"
 
 BUILD_TRIPLET=$("$ROOT/gnu-config-strata/config.guess")
 
@@ -900,7 +900,8 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/binutils-$ARCH"
 
         start_section "Configure binutils"
-        CPPFLAGS="$ROOT_CPPFLAGS" \
+        CFLAGS="$ROOT_CPPFLAGS" \
+        CXXFLAGS="$ROOT_CPPFLAGS" \
         LDFLAGS="$ROOT_LDFLAGS -s" \
         ../../binutils-strata/configure \
             --build="$BUILD_TRIPLET" \
@@ -936,7 +937,8 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/gcc-pass1-$ARCH"
 
         start_section "Configure GCC (pass1)"
-        CPPFLAGS="$ROOT_CPPFLAGS" \
+        CFLAGS="$ROOT_CPPFLAGS" \
+        CXXFLAGS="$ROOT_CPPFLAGS" \
         LDFLAGS="$ROOT_LDFLAGS -s" \
         ../../gcc-strata/configure \
             --build="$BUILD_TRIPLET" \
@@ -1080,7 +1082,8 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure GCC (pass2)"
         AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
         RANLIB_FOR_TARGET="true" \
-        CPPFLAGS="$ROOT_CPPFLAGS" \
+        CFLAGS="$ROOT_CPPFLAGS" \
+        CXXFLAGS="$ROOT_CPPFLAGS" \
         LDFLAGS="$ROOT_LDFLAGS -s" \
         ../../gcc-strata/configure \
             --build="$BUILD_TRIPLET" \
