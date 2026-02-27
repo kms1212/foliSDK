@@ -344,7 +344,7 @@ if [ ! -f "$BUILDDIR/.configure-libtool.stamp" ]; then
     start_section "Configure libtool"
     ../../libtool-strata/configure \
         --prefix="$PKGBUILDDIR/$PREFIX" \
-        --disable-ltdl-install
+        --enable-ltdl-install
     end_section
 
     touch "$BUILDDIR/.configure-libtool.stamp"
