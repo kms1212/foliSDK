@@ -513,12 +513,17 @@ if [ ! -f "$BUILDDIR/.patch-libxml2.stamp" ]; then
     start_section "Patch libxml2"
     "$LIBTOOLIZE" --force --copy
 
+    OLD_PATH="$PATH"
+    if [ "$OSNAME" == "Darwin" ]; then
+        export PATH="$PATH:/opt/homebrew/bin"
+    fi
     ACLOCAL="$ACLOCAL_HOST" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     AUTORECONF="$AUTORECONF_HOST" \
     NOCONFIGURE="true" \
     ./autogen.sh
+    export PATH="$OLD_PATH"
 
     cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libxml2-src"
     cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libxml2-src"
@@ -812,7 +817,7 @@ if [ ! -f "$BUILDDIR/.configure-cmake.stamp" ]; then
     cd "$BUILDDIR/cmake"
 
     start_section "Configure cmake"
-    ../../cmake-strata/bootstrap --prefix="$PREFIX"
+    ../../cmake-strata/bootstrap --prefix="$PREFIX" --parallel="$PARALLEL"
     end_section
 
     touch "$BUILDDIR/.configure-cmake.stamp"
@@ -867,23 +872,24 @@ fi
 unset LIBTOOL
 unset LIBTOOLIZE
 
-ROOT_CPPFLAGS="$CPPFLAGS"
-ROOT_LDFLAGS="$LDFLAGS"
 ROOT_PATH="$PATH"
+
+BUILD_TRIPLET=$("$ROOT/gnu-config-strata/config.guess")
 
 for ARCH in "${ARCHS[@]}"; do
     # Per-Target Build Settings
-    TARGET="$ARCH-strata-folios"
-    SYSROOT="$PREFIX/$TARGET/sysroot"
+    TARGET_TRIPLET="$ARCH-strata-folios"
+    SYSROOT="$PREFIX/$TARGET_TRIPLET/sysroot"
 
     export PATH="$ROOT_PATH"
-    export CPPFLAGS="-I$PKGBUILDDIR/$SYSROOT/include $ROOT_CPPFLAGS"
-    export LDFLAGS="-L$PKGBUILDDIR/$SYSROOT/lib $ROOT_LDFLAGS"
     export PKG_CONFIG_PATH=""
     export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
     export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
-    export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
-    export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+
+    unset CPPFLAGS
+    unset LDFLAGS
+    unset PKG_CONFIG_ALLOW_SYSTEM_CFLAGS
+    unset PKG_CONFIG_ALLOW_SYSTEM_LIBS
 
     mkdir -p "$PKGBUILDDIR/$SYSROOT"
     
@@ -895,7 +901,8 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure binutils"
         LDFLAGS="$LDFLAGS -s" \
         ../../binutils-strata/configure \
-            --target="$TARGET" \
+            --build="$BUILD_TRIPLET" \
+            --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
@@ -929,7 +936,8 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure GCC (pass1)"
         LDFLAGS="$LDFLAGS -s" \
         ../../gcc-strata/configure \
-            --target="$TARGET" \
+            --build="$BUILD_TRIPLET" \
+            --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
@@ -977,9 +985,10 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/musl-pass1-$ARCH"
 
         start_section "Configure musl libc (pass1)"
-        CROSS_COMPILE="$TARGET-" \
+        CROSS_COMPILE="$TARGET_TRIPLET-" \
         ../../musl-strata/configure \
-            --target="$TARGET" \
+            --build="$BUILD_TRIPLET" \
+            --target="$TARGET_TRIPLET" \
             --with-sysroot="$SYSROOT" \
             --prefix="/usr" \
             --disable-shared \
@@ -1016,18 +1025,19 @@ for ARCH in "${ARCHS[@]}"; do
         if [ "$OSNAME" == "Darwin" ]; then
             export PATH="$PATH:/opt/homebrew/bin"
         fi
-        CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-        CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" \
-        AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o" \
-        NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm" \
-        AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as" \
-        LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld" \
-        STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip" \
+        CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" \
+        CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" \
+        AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
+        NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-nm" \
+        AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-as" \
+        LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld" \
+        STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-strip" \
         RANLIB="true" \
         ../../libtool-strata/configure \
+            --build="$BUILD_TRIPLET" \
             --prefix="$PKGBUILDDIR/$PREFIX" \
-            --exec-prefix="$PKGBUILDDIR/$PREFIX/$TARGET" \
-            --host="$TARGET" \
+            --exec-prefix="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET" \
+            --host="$TARGET_TRIPLET" \
             --enable-ltdl-install \
             --enable-shared \
             --enable-static
@@ -1057,19 +1067,20 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libtool-pass1-$ARCH.stamp"
     fi
 
-    export LIBTOOL="$PKGBUILDDIR/$PREFIX/$TARGET/bin/libtool"
-    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/$TARGET/bin/libtoolize"
+    export LIBTOOL="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin/libtool"
+    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin/libtoolize"
 
     if [ ! -f "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gcc-pass2-$ARCH"
         cd "$BUILDDIR/gcc-pass2-$ARCH"
 
         start_section "Configure GCC (pass2)"
-        AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o" \
+        AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
         RANLIB_FOR_TARGET="true" \
         LDFLAGS="$LDFLAGS -s" \
         ../../gcc-strata/configure \
-            --target="$TARGET" \
+            --build="$BUILD_TRIPLET" \
+            --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
@@ -1113,14 +1124,14 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Make GCC (pass2) - libstdc++"
         make -j"$PARALLEL" all-target-libstdc++-v3 \
-            LDFLAGS_FOR_TARGET="-L$PKGBUILDDIR/$PREFIX/$TARGET/lib"
+            LDFLAGS_FOR_TARGET="-L$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/lib"
         end_section
 
         start_section "Install GCC (pass2) - libstdc++"
         make install-target-libstdc++-v3 DESTDIR="$PKGBUILDDIR"
         end_section
         
-        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc" -print-file-name=include)
+        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" -print-file-name=include)
         cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
 
         touch "$BUILDDIR/.build-gcc-pass2-$ARCH.stamp"
@@ -1129,10 +1140,8 @@ for ARCH in "${ARCHS[@]}"; do
     if [ ! -f "$BUILDDIR/.cleanup-pass1-$ARCH.stamp" ]; then
         cd "$PKGBUILDDIR"
 
-        find "./$PREFIX/lib/" -name "*.a" -delete
-        find "./$PREFIX/lib/" -name "*.so*" -delete
-
         find "./$SYSROOT/usr/lib/" -name "*.a" -delete
+        find "./$SYSROOT/usr/lib/" -name "*.la" -delete
         find "./$SYSROOT/usr/lib/" -name "*.so*" -delete
 
         touch "$BUILDDIR/.cleanup-pass1-$ARCH.stamp"
@@ -1143,10 +1152,11 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/musl-pass2-$ARCH"
 
         start_section "Configure musl libc (pass2)"
-        CROSS_COMPILE="$TARGET-" \
+        CROSS_COMPILE="$TARGET_TRIPLET-" \
         ../../musl-strata/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$SYSROOT" \
-            --target="$TARGET" \
+            --target="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --disable-gcc-wrapper
         end_section
@@ -1172,15 +1182,15 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-musl-pass2-$ARCH.stamp"
     fi
 
-    export PATH="$PKGBUILDDIR/$PREFIX/$TARGET/bin:$ROOT_PATH"
-    export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
-    export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET-gcc"
-    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld -r -o"
-    export AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET-as"
-    export OBJCOPY="$PKGBUILDDIR/$PREFIX/bin/$TARGET-objcopy"
-    export LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET-ld"
-    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET-nm"
-    export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET-strip"
+    export PATH="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin:$ROOT_PATH"
+    export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
+    export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
+    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o"
+    export AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-as"
+    export OBJCOPY="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-objcopy"
+    export LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld"
+    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-nm"
+    export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-strip"
     export RANLIB="true"
 
     if [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
@@ -1190,8 +1200,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure gmp"
         CFLAGS="-std=gnu11" \
         ../gmp-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1220,8 +1231,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure mpfr"
         ../mpfr-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1250,8 +1262,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure mpc"
         ../mpc-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1280,8 +1293,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure Nettle"
         ../nettle-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --disable-openssl \
             --enable-shared \
@@ -1311,8 +1325,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libsodium"
         ../libsodium-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1341,8 +1356,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libffi"
         ../libffi-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1372,8 +1388,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure libuv"
         CPPFLAGS="-D_GNU_SOURCE" \
         ../libuv-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1402,8 +1419,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libxml2"
         ../libxml2-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1433,8 +1451,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure libxslt"
         CPPFLAGS="$CPPFLAGS -I$PKGBUILDDIR/$SYSROOT/usr/include/libxml2" \
         ../libxslt-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static \
@@ -1465,8 +1484,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libexpat"
         ../libexpat-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1495,7 +1515,7 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure yyjson"
         "$CMAKE" -S../yyjson-src -B. \
-            -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/$TARGET.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/$TARGET_TRIPLET.cmake" \
             -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$PREFIX" \
             -DCMAKE_INSTALL_PREFIX="/usr" \
             -DCMAKE_SYSROOT="$PKGBUILDDIR/$SYSROOT" \
@@ -1539,7 +1559,7 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Make zlib"
         make -f "./folios/Makefile.gcc" -j"$PARALLEL" \
-            CROSS_PREFIX="$TARGET-" \
+            CROSS_PREFIX="$TARGET_TRIPLET-" \
             CFLAGS="-I. $CPPFLAGS"
         end_section
 
@@ -1591,8 +1611,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure xz"
         ../xz-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1700,8 +1721,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure libarchive"
         CPPFLAGS="$CPPFLAGS -DAES_MAX_KEY_SIZE=AES256_KEY_SIZE" \
         ../libarchive-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static \
@@ -1740,8 +1762,9 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure libiconv"
         ../libiconv-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1774,8 +1797,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure ncurses"
         # TODO: install database
         ../ncurses-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --with-libtool \
             --with-build-cc=gcc \
@@ -1816,8 +1840,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure editline"
         CFLAGS="-std=gnu11" \
         ../editline-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --enable-shared \
             --enable-static
@@ -1847,8 +1872,9 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure readline"
         CFLAGS="-std=gnu11" \
         ../readline-src/configure \
+            --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
-            --host="$TARGET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --with-curses \
             --enable-shared \
@@ -1881,10 +1907,11 @@ for ARCH in "${ARCHS[@]}"; do
         CFLAGS="-std=gnu11" \
         autosetup_tclsh="$TCLSH" \
         ../sqlite3-src/configure \
-            --host="$TARGET" \
+            --build="$BUILD_TRIPLET" \
+            --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --all \
-            --soname=none \
+            --soname=sqlite3.dl \
             --with-readline-ldflags="-L$PKGBUILDDIR/$SYSROOT/usr/lib -lreadline -lncursesw" \
             --with-readline-cflags="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
             --dll-basename="sqlite3" \
@@ -1931,9 +1958,10 @@ for ARCH in "${ARCHS[@]}"; do
             export PATH="$PATH:/opt/homebrew/bin"
         fi
         ../../libtool-strata/configure \
+            --build="$BUILD_TRIPLET" \
             --prefix="$PREFIX" \
-            --exec-prefix="$PREFIX/$TARGET" \
-            --host="$TARGET" \
+            --exec-prefix="$PREFIX/$TARGET_TRIPLET" \
+            --host="$TARGET_TRIPLET" \
             --enable-ltdl-install \
             --enable-shared \
             --enable-static
@@ -1958,8 +1986,8 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Install libtool (pass2)"
         make install DESTDIR="$PKGBUILDDIR"
-        ln -s "../$TARGET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET-libtool"
-        ln -s "../$TARGET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET-libtoolize"
+        ln -s "../$TARGET_TRIPLET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
+        ln -s "../$TARGET_TRIPLET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
         end_section
 
         touch "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp"

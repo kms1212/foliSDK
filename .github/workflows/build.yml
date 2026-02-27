@@ -71,7 +71,7 @@ jobs:
     - name: Install Dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install texinfo wget gnu-getopt automake libtool tcl-tk help2man
+        brew install texinfo wget gnu-getopt autoconf automake libtool tcl-tk help2man
         echo "$(brew --prefix texinfo)/bin" >> $GITHUB_PATH
         wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz
         wget https://ftp.gnu.org/gnu/automake/automake-1.15.tar.xz

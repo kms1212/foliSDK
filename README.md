@@ -19,7 +19,7 @@
 
 * **Development Tools**:
 * **CMake Integration**: Includes a custom fork (`cmake-strata`) and built-in modules (e.g., `SIDLMacros.cmake`) tailored to natively support building `foliOS` projects.
-* **sidlc (SIDL Compiler)**: A custom Interface Definition Language compiler. It parses `.sidl` descriptions to automatically generate C header (`.h`) and source (`.c`) IPC boilerplate bindings, completely avoiding global scope compound literal issues.
+* **sidlc (SIDL Compiler)**: A custom Interface Definition Language compiler. It parses `.sidl` descriptions to automatically generate C header (`.h`) and source (`.c`) boilerplate bindings, completely avoiding global scope compound literal issues.
 
 * **Environment Management**: Includes a structured shell activator (`folisdk-env.sh`) for macOS or Linux shells to seamlessly enter the SDK environment without polluting the host environment.
 
@@ -115,7 +115,7 @@ With the SDK activated, you can write native applications using the modern `foli
 cmake_minimum_required(VERSION 3.20)
 project(HelloWorld C)
 
-# Use the built-in SIDL macros from foliSDK
+# Use the built-in SIDL macros from sidlc
 include(UseSIDLC)
 
 # Automatically compile .sidl to .c/.h bindings
