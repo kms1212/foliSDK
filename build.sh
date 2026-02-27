@@ -872,7 +872,6 @@ fi
 unset LIBTOOL
 unset LIBTOOLIZE
 
-ROOT_PATH="$PATH"
 ROOT_CPPFLAGS="$CPPFLAGS"
 ROOT_LDFLAGS="$LDFLAGS"
 
@@ -883,7 +882,6 @@ for ARCH in "${ARCHS[@]}"; do
     TARGET_TRIPLET="$ARCH-strata-folios"
     SYSROOT="$PREFIX/$TARGET_TRIPLET/sysroot"
 
-    export PATH="$ROOT_PATH"
     export PKG_CONFIG_PATH=""
     export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$PREFIX/lib/pkgconfig:$PKGBUILDDIR/$PREFIX/share/pkgconfig"
     export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$PREFIX"
@@ -1067,13 +1065,15 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Install libtool (pass1)"
         make install
+        ln -s "../$TARGET_TRIPLET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
+        ln -s "../$TARGET_TRIPLET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
         end_section
 
         touch "$BUILDDIR/.build-libtool-pass1-$ARCH.stamp"
     fi
 
-    export LIBTOOL="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin/libtool"
-    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin/libtoolize"
+    export LIBTOOL="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
+    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
 
     if [ ! -f "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gcc-pass2-$ARCH"
@@ -1189,7 +1189,6 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-musl-pass2-$ARCH.stamp"
     fi
 
-    export PATH="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin:$ROOT_PATH"
     export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
     export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
 
@@ -1202,6 +1201,13 @@ for ARCH in "${ARCHS[@]}"; do
     export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-nm"
     export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-strip"
     export RANLIB="true"
+
+    export CC_FOR_BUILD="cc"
+    export CXX_FOR_BUILD="c++"
+    export CPP_FOR_BUILD="cc -E"
+    export LD_FOR_BUILD="ld"
+    export AR_FOR_BUILD="ar"
+    export RANLIB_FOR_BUILD="ranlib"
 
     if [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gmp-$ARCH"
@@ -2003,7 +2009,6 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp"
     fi
 
-    unset PATH
     unset PKG_CONFIG_PATH
     unset PKG_CONFIG_LIBDIR
     unset PKG_CONFIG_SYSROOT_DIR
@@ -2018,9 +2023,13 @@ for ARCH in "${ARCHS[@]}"; do
     unset NM
     unset STRIP
     unset RANLIB
+    unset CC_FOR_BUILD
+    unset CXX_FOR_BUILD
+    unset CPP_FOR_BUILD
+    unset LD_FOR_BUILD
+    unset AR_FOR_BUILD
+    unset RANLIB_FOR_BUILD
 done
-
-export PATH="$ROOT_PATH"
 
 if [ ! -f "$BUILDDIR/.uninstall-libtool.stamp" ]; then
     cd "$BUILDDIR/libtool"
