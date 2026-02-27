@@ -44,7 +44,6 @@ jobs:
           help2man \
           autoconf \
           automake \
-          libtool \
           autoconf-archive \
           pkg-config \
           autopoint \
@@ -91,11 +90,6 @@ jobs:
         LC_ALL=C make
         sudo make install
         cd ../..
-
-    - name: Bootstrap Submodules
-      run: |
-        chmod +x bootstrap.sh
-        ./bootstrap.sh
 
     - name: Debug - SSH into runner
       if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}

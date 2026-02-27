@@ -1,13 +1,20 @@
 # foliSDK
 
-**foliSDK** is a comprehensive cross-compiler toolchain and system library package for **foliOS**. It provides an automated build system that downloads, patches, and compiles essential utility libraries, development tools, and an architecture-specific GCC toolchain tailored for the unique foliOS environment.
+**foliSDK** is a comprehensive cross-compiler toolchain and system library package for **foliOS**. It defines the canonical build environment for the foliOS ABI, runtime model, and binary format.
+
+Unlike generic cross-toolchains, foliSDK intentionally removes historical Unix toolchain artifacts and aligns the entire build pipeline with the architectural principles of the foliOS runtime.
 
 ## Features
 
-* **Custom foliOS ABI & Toolchain**: A deeply patched GCC/Binutils toolchain (`x86_64-strata-folios`, `i686-strata-folios`) designed for a clean-room OS environment:
-* **Modern Library Formats**: Replaces legacy `.a` and `.so` with `.sl` (Relocatable Single ELF Object) and `.dl` (Dynamic Library).
-* **Custom ELF Interpreter**: Binaries are natively linked against foliOS's custom dynamic linker (`/System/Processes/Current/RuntimeLinker.app`).
-* **Linker GC as Default**: The compiler is configured by default to use `-ffunction-sections -fdata-sections` and `-Wl,--gc-sections`.
+* **Custom foliOS ABI & Toolchain**: A deeply patched GCC/Binutils toolchain (`x86_64-strata-folios`, `i686-strata-folios`) designed for a clean-room OS environment.
+* **Unified ELF-Based Link Model**: Eliminates legacy `ar`/`ranlib` archives in favor of a fully ELF-native static and dynamic linking strategy.
+* **Modern Library Formats**:
+  * `.sl` — A static library format implemented as a single relocatable ELF object generated via `ld -r`. Unlike traditional `.a` archives, `.sl` preserves full relocation metadata and enables fine-grained linker garbage collection.
+  * `.dl` — A dynamic library format comparable to traditional `.so`, including SONAME support, but governed under foliOS package-level ABI management.
+* **Package-Level ABI Versioning**: foliOS does not implement per-library ABI negotiation. Compatibility is guaranteed and managed at the package level rather than at individual binary granularity.
+* **Custom ELF Interpreter**: Binaries are natively linked against foliOS's context-aware runtime linker (`/System/Processes/Current/RuntimeLinker.app`).  
+  The `Current` node is resolved through GNT (Global Namespace Tree), allowing the system to dynamically select the appropriate runtime for the active process context.
+* **Linker GC as Default**: The compiler is configured by default to use `-ffunction-sections -fdata-sections` and `-Wl,--gc-sections`, enabling aggressive dead code elimination at function granularity.
 * **Layered Syscall Architecture**: Clean separation between the Kernel RunTime layer (`libstrata.dl`) and the POSIX wrapper (`libc.dl`), seamlessly linked together via GCC's custom `LIB_SPEC`.
 
 * **System Libraries Built-in**:
@@ -19,9 +26,20 @@
 
 * **Development Tools**:
 * **CMake Integration**: Includes a custom fork (`cmake-strata`) and built-in modules (e.g., `SIDLMacros.cmake`) tailored to natively support building `foliOS` projects.
-* **sidlc (SIDL Compiler)**: A custom Interface Definition Language compiler. It parses `.sidl` descriptions to automatically generate C header (`.h`) and source (`.c`) boilerplate bindings, completely avoiding global scope compound literal issues.
+* **sidlc (SIDL Compiler)**: A custom Interface Definition Language compiler. It parses `.sidl` descriptions to automatically generate C header (`.h`) and source (`.c`) boilerplate bindings, avoiding global-scope compound literal issues and ensuring ABI-stable interface generation.
 
 * **Environment Management**: Includes a structured shell activator (`folisdk-env.sh`) for macOS or Linux shells to seamlessly enter the SDK environment without polluting the host environment.
+
+## Design Rationale
+
+foliSDK intentionally modernizes the traditional Unix toolchain model:
+
+* Removes `ar` archive indirection in favor of ELF-native static link units.
+* Enables deterministic and reproducible builds by reducing container-level metadata variance.
+* Improves compatibility with function-level garbage collection.
+* Simplifies the toolchain surface area by unifying around a single object model.
+
+GCC was selected as the base compiler due to its mature spec override system, straightforward `LIB_SPEC` customization, and deep integration with Binutils — allowing precise control over ABI behavior and runtime linkage.
 
 ## Prerequisites
 
@@ -33,15 +51,17 @@ You'll need a set of GNU tools explicitly installed on your host system:
 brew install texinfo wget gnu-getopt automake libtool tcl-tk help2man
 ```
 
-*(The scripts expect autoconf/automake to be present in `/opt/autoconf-...` paths as structured in the GitHub Actions, or standard macOS installations.)*
+Additionally, `autoconf-2.69` and `automake-1.15` are required and should be installed to `/opt/autoconf-2.69` and `/opt/automake-1.15` respectively.
 
 ### Linux Requirements
 
 Ensure standard GNU build utilities are installed:
 
 ```sh
-sudo apt-get install build-essential bison flex texinfo wget tar tcl help2man autoconf automake libtool
+sudo apt-get install build-essential bison flex texinfo wget tar tcl help2man autoconf automake autoconf-archive pkg-config autopoint libssl-dev
 ```
+
+Additionally, `autoconf-2.69` and `automake-1.15` are required and should be installed to `/opt/autoconf-2.69` and `/opt/automake-1.15` respectively.
 
 ## Building the SDK
 
@@ -105,7 +125,7 @@ You can now freely call gcc commands (e.g., `x86_64-strata-folios-gcc`) or confi
 folisdk_deactivate
 ```
 
-### Developing foliOS Applications
+## Developing foliOS Applications
 
 With the SDK activated, you can write native applications using the modern `foliOS` ABI. The toolchain handles `.dl` (dynamic) and `.sl` (static) links seamlessly.
 
@@ -129,7 +149,7 @@ add_executable(hello_app main.c ${SIDL_SRCS})
 target_include_directories(hello_app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 ```
 
-### Manual Usage (Linux / Raw extract)
+## Manual Usage (Linux / Raw extract)
 
 Alternatively, extract the generated artifact and add the SDK's `bin` directory into your `$PATH`.
 
@@ -138,13 +158,3 @@ export PATH="/path/to/extracted/opt/folisdk/bin:$PATH"
 x86_64-strata-folios-gcc main.c -o out.app
 x86_64-strata-folios-strip out.app
 ```
-
-## Project Directory
-
-* `build.sh` - Comprehensive automated build pipeline.
-* `bootstrap.sh` - Dependency preparation script.
-* `cmake-strata/` - Custom CMake fork providing native `strata-folios` toolchain support.
-* `sidlc/` - The Interface Definition Language (IDL) compiler source for generating C bindings.
-* `versions.cfg` - Definitive configuration setting package and library versions downloaded during the build step.
-* `x86-folisdk.rb` - Packaged Homebrew install script for host environment mapping.
-* `patches/` - Required upstream source modifications for successful compilation inside the SDK framework.

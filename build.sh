@@ -869,6 +869,118 @@ if [ ! -f "$BUILDDIR/.build-sidlc.stamp" ]; then
     touch "$BUILDDIR/.build-sidlc.stamp"
 fi
 
+if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
+    mkdir -p "$BUILDDIR/gmp"
+    cd "$BUILDDIR/gmp"
+
+    start_section "Configure gmp"
+    ../gmp-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-gmp.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-gmp.stamp" ]; then
+    cd "$BUILDDIR/gmp"
+
+    start_section "Make gmp"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install gmp"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-gmp.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.configure-mpfr.stamp" ]; then
+    mkdir -p "$BUILDDIR/mpfr"
+    cd "$BUILDDIR/mpfr"
+
+    start_section "Configure mpfr"
+    ../mpfr-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-mpfr.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-mpfr.stamp" ]; then
+    cd "$BUILDDIR/mpfr"
+
+    start_section "Make mpfr"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install mpfr"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-mpfr.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.configure-mpc.stamp" ]; then
+    mkdir -p "$BUILDDIR/mpc"
+    cd "$BUILDDIR/mpc"
+
+    start_section "Configure mpc"
+    ../mpc-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-mpc.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-mpc.stamp" ]; then
+    cd "$BUILDDIR/mpc"
+
+    start_section "Make mpc"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install mpc"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-mpc.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.configure-isl.stamp" ]; then
+    mkdir -p "$BUILDDIR/isl"
+    cd "$BUILDDIR/isl"
+
+    start_section "Configure isl"
+    ../isl-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-isl.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-isl.stamp" ]; then
+    cd "$BUILDDIR/isl"
+
+    start_section "Make isl"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install isl"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-isl.stamp"
+fi
+
 unset LIBTOOL
 unset LIBTOOLIZE
 
@@ -905,6 +1017,10 @@ for ARCH in "${ARCHS[@]}"; do
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$PREFIX" \
+            --with-isl="$PKGBUILDDIR/$PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
             --disable-nls \
@@ -942,6 +1058,10 @@ for ARCH in "${ARCHS[@]}"; do
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$PREFIX" \
+            --with-isl="$PKGBUILDDIR/$PREFIX" \
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
             --with-system-zlib \
@@ -1089,6 +1209,10 @@ for ARCH in "${ARCHS[@]}"; do
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
             --prefix="$PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$PREFIX" \
+            --with-isl="$PKGBUILDDIR/$PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
