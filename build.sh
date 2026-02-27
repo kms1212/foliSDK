@@ -899,7 +899,7 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/binutils-$ARCH"
 
         start_section "Configure binutils"
-        LDFLAGS="$LDFLAGS -s" \
+        LDFLAGS="-s" \
         ../../binutils-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
@@ -1077,7 +1077,7 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure GCC (pass2)"
         AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
         RANLIB_FOR_TARGET="true" \
-        LDFLAGS="$LDFLAGS -s" \
+        LDFLAGS="-s" \
         ../../gcc-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
@@ -1449,7 +1449,7 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/libxslt-$ARCH"
 
         start_section "Configure libxslt"
-        CPPFLAGS="$CPPFLAGS -I$PKGBUILDDIR/$SYSROOT/usr/include/libxml2" \
+        CPPFLAGS="-I$PKGBUILDDIR/$SYSROOT/usr/include/libxml2" \
         ../libxslt-src/configure \
             --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
@@ -1560,7 +1560,7 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Make zlib"
         make -f "./folios/Makefile.gcc" -j"$PARALLEL" \
             CROSS_PREFIX="$TARGET_TRIPLET-" \
-            CFLAGS="-I. $CPPFLAGS"
+            CFLAGS="-I."
         end_section
 
         start_section "Install zlib"
@@ -1695,8 +1695,8 @@ for ARCH in "${ARCHS[@]}"; do
             CC="$CC" \
             NM="$NM" \
             LD="$LD" \
-            CPPFLAGS="$CPPFLAGS -fPIC" \
-            LDFLAGS="$LDFLAGS -shared" \
+            CPPFLAGS="-fPIC" \
+            LDFLAGS="-shared" \
             ZSTD_LIB_ZLIB=1 \
             ZSTD_LIB_LZMA=1 \
             ZSTD_LIB_LZ4=1
@@ -1719,7 +1719,7 @@ for ARCH in "${ARCHS[@]}"; do
         cd "$BUILDDIR/libarchive-$ARCH"
 
         start_section "Configure libarchive"
-        CPPFLAGS="$CPPFLAGS -DAES_MAX_KEY_SIZE=AES256_KEY_SIZE" \
+        CPPFLAGS="-DAES_MAX_KEY_SIZE=AES256_KEY_SIZE" \
         ../libarchive-src/configure \
             --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
@@ -1994,8 +1994,6 @@ for ARCH in "${ARCHS[@]}"; do
     fi
 
     unset PATH
-    unset CPPFLAGS
-    unset LDFLAGS
     unset PKG_CONFIG_PATH
     unset PKG_CONFIG_LIBDIR
     unset PKG_CONFIG_SYSROOT_DIR
