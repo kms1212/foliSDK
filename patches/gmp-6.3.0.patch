@@ -1,5 +1,6 @@
---- aclocal.m4.orig	2026-02-22 22:27:32
-+++ aclocal.m4	2026-02-22 22:32:47
+diff --color -Naru gmp-6.3.0-src.orig/aclocal.m4 gmp-6.3.0-src/aclocal.m4
+--- gmp-6.3.0-src.orig/aclocal.m4	2026-02-22 22:27:32
++++ gmp-6.3.0-src/aclocal.m4	2026-02-22 22:32:47
 @@ -1511,6 +1511,17 @@
  _LT_DECL([], [AR], [1], [The archiver])
  _LT_DECL([], [AR_FLAGS], [1], [Flags to create an archive])

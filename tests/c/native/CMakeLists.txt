@@ -3,20 +3,20 @@ cmake_policy(SET CMP0076 NEW)
 
 project("test_native" VERSION 0.1.0 LANGUAGES C)
 
+include(UseSIDLC)
+
 # SIDL Compilations
-add_custom_command(
-    OUTPUT "${CMAKE_BINARY_DIR}/byte_stream.h" "${CMAKE_BINARY_DIR}/byte_stream.c"
-    COMMAND
-        "${CMAKE_SOURCE_DIR}/../../../build/pkgroot/opt/homebrew/opt/folisdk/bin/sidlc"
-            "${CMAKE_SOURCE_DIR}/../../../build/pkgroot/opt/homebrew/opt/folisdk/share/sidl/interfaces/byte_stream.sidl"
-            "--header=${CMAKE_BINARY_DIR}/byte_stream.h"
-            "--user-src=${CMAKE_BINARY_DIR}/byte_stream.c"
-    DEPENDS
-        "${CMAKE_SOURCE_DIR}/../../../build/pkgroot/opt/homebrew/opt/folisdk/share/sidl/interfaces/byte_stream.sidl"
+sidl_generate_c(
+    SRCS_VAR SIDL_SRCS
+    HDRS_VAR SIDL_HDRS
+    FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
 )
 
+message(STATUS "SIDL_SRCS: ${SIDL_SRCS}")
+message(STATUS "SIDL_HDRS: ${SIDL_HDRS}")
+
 # Target Configurations
-add_executable(test_native main.c ${CMAKE_BINARY_DIR}/byte_stream.c)
+add_executable(test_native main.c ${SIDL_SRCS})
 
 # Compile Options
 target_compile_features(test_native PUBLIC c_std_99)
