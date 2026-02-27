@@ -405,7 +405,7 @@ if [ ! -f "$BUILDDIR/.patch-mpfr.stamp" ]; then
     start_section "Patch mpfr"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -459,7 +459,7 @@ if [ ! -f "$BUILDDIR/.patch-libsodium.stamp" ]; then
     start_section "Patch libsodium"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -477,7 +477,7 @@ if [ ! -f "$BUILDDIR/.patch-libffi.stamp" ]; then
     start_section "Patch libffi"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -517,7 +517,7 @@ if [ ! -f "$BUILDDIR/.patch-libxml2.stamp" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
         export PATH="$PATH:/opt/homebrew/bin"
     fi
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     AUTORECONF="$AUTORECONF_HOST" \
@@ -538,7 +538,7 @@ if [ ! -f "$BUILDDIR/.patch-libxslt.stamp" ]; then
     start_section "Patch libxslt"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -556,7 +556,7 @@ if [ ! -f "$BUILDDIR/.patch-libexpat.stamp" ]; then
     start_section "Patch libexpat"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -598,7 +598,7 @@ if [ ! -f "$BUILDDIR/.patch-xz.stamp" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
         export PATH="$PATH:/opt/homebrew/bin"
     fi
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -637,7 +637,7 @@ if [ ! -f "$BUILDDIR/.patch-libarchive.stamp" ]; then
     start_section "Patch libarchive"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -688,7 +688,7 @@ if [ ! -f "$BUILDDIR/.patch-editline.stamp" ]; then
     start_section "Patch editline"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_1_15_HOST" \
+    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_1_15_HOST" \
     AUTOCONF="$AUTOCONF_2_69_HOST" \
     "$AUTORECONF_2_69_HOST" -ivf
@@ -2002,8 +2002,6 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Install libtool (pass2)"
         make install DESTDIR="$PKGBUILDDIR"
-        ln -s "../$TARGET_TRIPLET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
-        ln -s "../$TARGET_TRIPLET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
         end_section
 
         touch "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp"

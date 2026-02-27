@@ -12,9 +12,6 @@ sidl_generate_c(
     FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
 )
 
-message(STATUS "SIDL_SRCS: ${SIDL_SRCS}")
-message(STATUS "SIDL_HDRS: ${SIDL_HDRS}")
-
 # Target Configurations
 add_executable(test_native main.c ${SIDL_SRCS})
 
