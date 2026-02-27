@@ -165,6 +165,7 @@ if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
 
     curl --retry 5 --retry-delay 2 -ZL \
         -o "pkg-config-$PKGCONFIG_VERSION.tar.gz" "$PKGCONFIG_URL" \
+        -o "gettext-$GETTEXT_VERSION.tar.xz" "$GETTEXT_URL" \
         -o "gmp-$GMP_VERSION.tar.xz" "$GMP_URL" \
         -o "mpfr-$MPFR_VERSION.tar.xz" "$MPFR_URL" \
         -o "mpc-$MPC_VERSION.tar.gz" "$MPC_URL" \
@@ -199,6 +200,11 @@ if [ ! -f "$BUILDDIR/.extract-sources.stamp" ]; then
     rm -rf pkgconfig-src
     tar -xf "pkg-config-$PKGCONFIG_VERSION.tar.gz"
     mv "pkg-config-$PKGCONFIG_VERSION" pkgconfig-src
+
+    # gettext
+    rm -rf gettext-src
+    tar -xf "gettext-$GETTEXT_VERSION.tar.xz"
+    mv "gettext-$GETTEXT_VERSION" gettext-src
 
     # gmp
     rm -rf gmp-src
@@ -869,6 +875,34 @@ if [ ! -f "$BUILDDIR/.build-sidlc.stamp" ]; then
     touch "$BUILDDIR/.build-sidlc.stamp"
 fi
 
+if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
+    mkdir -p "$BUILDDIR/gettext"
+    cd "$BUILDDIR/gettext"
+
+    start_section "Configure gettext"
+    ../gettext-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-gettext.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-gettext.stamp" ]; then
+    cd "$BUILDDIR/gettext"
+
+    start_section "Make gettext"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install gettext"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-gettext.stamp"
+fi
+
 if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
     mkdir -p "$BUILDDIR/gmp"
     cd "$BUILDDIR/gmp"
@@ -1023,10 +1057,25 @@ for ARCH in "${ARCHS[@]}"; do
             --with-isl="$PKGBUILDDIR/$PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
-            --disable-nls \
+            --with-system-zlib \
             --disable-werror \
             --enable-static \
-            --with-system-zlib
+            --enable-nls \
+            --enable-lto \
+            --enable-plugins \
+            --enable-year2038 \
+            --disable-gprofng \
+            --enable-default-hash-style=gnu \
+            --enable-new-dtags \
+            --enable-relro \
+            --enable-separate-code \
+            --enable-rosegment \
+            --enable-error-execstack \
+            --enable-error-rwx-segments \
+            --enable-colored-disassembly \
+            --enable-deterministic-archives \
+            --enable-compressed-debug-sections=all \
+            --enable-default-compressed-debug-sections-algorithm=zlib
         end_section
 
         touch "$BUILDDIR/.configure-binutils-$ARCH.stamp"
@@ -1217,18 +1266,25 @@ for ARCH in "${ARCHS[@]}"; do
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
             --with-system-zlib \
-            --enable-languages=c,c++ \
+            --enable-languages=c,c++,objc,obj-c++,fortran \
             --enable-lto \
             --enable-shared \
             --enable-threads=posix \
-            --disable-nls \
+            --enable-nls \
             --disable-libsanitizer \
             --disable-werror \
             --disable-multilib \
-            --disable-libgomp \
+            --enable-libgomp \
             --enable-libssp \
+            --enable-default-ssp \
+            --enable-cet \
+            --enable-secureplt \
             --enable-libatomic \
-            --enable-libquadmath
+            --enable-libquadmath \
+            --enable-__cxa_atexit \
+            --enable-tls \
+            --enable-linker-build-id \
+            --enable-decimal-float=yes
         end_section
 
         touch "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp"
