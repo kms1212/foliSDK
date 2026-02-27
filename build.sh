@@ -883,8 +883,8 @@ for ARCH in "${ARCHS[@]}"; do
 
     export PATH="$ROOT_PATH"
     export PKG_CONFIG_PATH=""
-    export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
-    export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
+    export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$PREFIX/lib/pkgconfig:$PKGBUILDDIR/$PREFIX/share/pkgconfig"
+    export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$PREFIX"
 
     unset CPPFLAGS
     unset LDFLAGS
@@ -1183,6 +1183,9 @@ for ARCH in "${ARCHS[@]}"; do
     fi
 
     export PATH="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/bin:$ROOT_PATH"
+    export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
+    export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
+
     export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
     export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
     export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o"
@@ -1997,8 +2000,6 @@ for ARCH in "${ARCHS[@]}"; do
     unset PKG_CONFIG_PATH
     unset PKG_CONFIG_LIBDIR
     unset PKG_CONFIG_SYSROOT_DIR
-    unset PKG_CONFIG_ALLOW_SYSTEM_CFLAGS
-    unset PKG_CONFIG_ALLOW_SYSTEM_LIBS
     unset LIBTOOL
     unset LIBTOOLIZE
     unset CC
