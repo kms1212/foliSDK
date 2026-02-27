@@ -516,7 +516,9 @@ if [ ! -f "$BUILDDIR/.patch-libxml2.stamp" ]; then
     ACLOCAL="$ACLOCAL_HOST" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
-    "$AUTORECONF_HOST" -ivf
+    AUTORECONF="$AUTORECONF_HOST" \
+    NOCONFIGURE="true" \
+    ./autogen.sh
 
     cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/libxml2-src"
     cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/libxml2-src"
@@ -1802,7 +1804,6 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Install ncurses"
         make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
         ln -sf libncursesw.dl "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl"
-        mv "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl" "$PKGBUILDDIR/$SYSROOT/usr/lib/libncurses.dl"
         end_section
         
         touch "$BUILDDIR/.build-ncurses-$ARCH.stamp"
@@ -2004,7 +2005,8 @@ if [ ! -f "$BUILDDIR/.cleanup.stamp" ]; then
     start_section "Cleanup files & build paths"
     find . -name "*.la" -delete
     if [ "$SED_TYPE" == "bsd" ]; then
-        LC_CTYPE=C find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
+        LC_ALL=C \
+        find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
             -exec sed -i '' "s|$PKGBUILDDIR||g" {} +
     else
         find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \

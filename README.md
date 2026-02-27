@@ -122,7 +122,7 @@ include(UseSIDLC)
 sidl_generate_c(
     SRCS_VAR SIDL_SRCS
     HDRS_VAR SIDL_HDRS
-    FILES "${CMAKE_SYSROOT}/share/sidl/interfaces/byte_stream.sidl"
+    FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
 )
 
 add_executable(hello_app main.c ${SIDL_SRCS})
