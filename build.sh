@@ -881,7 +881,7 @@ if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
 
     start_section "Configure gettext"
     ../gettext-src/configure \
-        --prefix="$PREFIX/$PKGBUILDDIR" \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -909,7 +909,7 @@ if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
 
     start_section "Configure gmp"
     ../gmp-src/configure \
-        --prefix="$PREFIX/$PKGBUILDDIR" \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -937,7 +937,7 @@ if [ ! -f "$BUILDDIR/.configure-mpfr.stamp" ]; then
 
     start_section "Configure mpfr"
     ../mpfr-src/configure \
-        --prefix="$PREFIX/$PKGBUILDDIR" \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -965,7 +965,7 @@ if [ ! -f "$BUILDDIR/.configure-mpc.stamp" ]; then
 
     start_section "Configure mpc"
     ../mpc-src/configure \
-        --prefix="$PREFIX/$PKGBUILDDIR" \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -993,7 +993,7 @@ if [ ! -f "$BUILDDIR/.configure-isl.stamp" ]; then
 
     start_section "Configure isl"
     ../isl-src/configure \
-        --prefix="$PREFIX/$PKGBUILDDIR" \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
