@@ -877,6 +877,34 @@ if [ ! -f "$BUILDDIR/.build-sidlc.stamp" ]; then
     touch "$BUILDDIR/.build-sidlc.stamp"
 fi
 
+if [ ! -f "$BUILDDIR/.configure-libiconv.stamp" ]; then
+    mkdir -p "$BUILDDIR/libiconv"
+    cd "$BUILDDIR/libiconv"
+
+    start_section "Configure libiconv"
+    ../libiconv-src/configure \
+        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --disable-shared \
+        --enable-static
+    end_section
+
+    touch "$BUILDDIR/.configure-libiconv.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.build-libiconv.stamp" ]; then
+    cd "$BUILDDIR/libiconv"
+
+    start_section "Make libiconv"
+    make -j"$PARALLEL"
+    end_section
+
+    start_section "Install libiconv"
+    make install
+    end_section
+
+    touch "$BUILDDIR/.build-libiconv.stamp"
+fi
+
 if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
     mkdir -p "$BUILDDIR/gettext"
     cd "$BUILDDIR/gettext"
@@ -885,7 +913,8 @@ if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
     ../gettext-src/configure \
         --prefix="$PKGBUILDDIR/$PREFIX" \
         --disable-shared \
-        --enable-static
+        --enable-static \
+        --with-libiconv-prefix="$PKGBUILDDIR/$PREFIX"
     end_section
 
     touch "$BUILDDIR/.configure-gettext.stamp"
@@ -2225,6 +2254,16 @@ if [ ! -f "$BUILDDIR/.uninstall-libtool.stamp" ]; then
     end_section
 
     touch "$BUILDDIR/.uninstall-libtool.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.uninstall-libiconv.stamp" ]; then
+    cd "$BUILDDIR/libiconv"
+
+    start_section "Uninstalling libiconv"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-libiconv.stamp"
 fi
 
 if [ ! -f "$BUILDDIR/.uninstall-gettext.stamp" ]; then
