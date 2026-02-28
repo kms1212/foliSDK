@@ -118,7 +118,8 @@ fi
 
 # macOS Workarounds
 if [ "$OSNAME" == "Darwin" ]; then
-    export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+    SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+    export SDKROOT
     export MAKEINFO=/opt/homebrew/bin/makeinfo
 fi
 
@@ -156,6 +157,7 @@ unset DYLD_LIBRARY_PATH
 unset C_INCLUDE_PATH
 unset CPLUS_INCLUDE_PATH
 unset LIBRARY_PATH
+
 
 # Global Builds
 if [ ! -f "$BUILDDIR/.download-sources.stamp" ]; then
@@ -1022,6 +1024,13 @@ ROOT_CPPFLAGS="$CPPFLAGS"
 ROOT_LDFLAGS="$LDFLAGS"
 
 BUILD_TRIPLET=$("$ROOT/gnu-config-strata/config.guess")
+
+
+# macOS Framework Settings
+if [ "$OSNAME" == "Darwin" ]; then
+    ROOT_LDFLAGS="$ROOT_LDFLAGS -framework CoreFoundation"
+fi
+
 
 for ARCH in "${ARCHS[@]}"; do
     # Per-Target Build Settings

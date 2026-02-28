@@ -5,7 +5,7 @@ class X86Folisdk < Formula
   url "file://#{Dir.pwd}/build/folisdk.tar.gz"
   
   version "0.0.1"
-  sha256 "d0e21ae81a0f798fbb5be8b0f2c43ae6646c4291125a7c4afa2f26d986e11c0f"
+  sha256 "13d1d171690bbfc6a6be918cfaf00c4234f51d90e7b571fd4f759b6c9077cf53"
   
   keg_only "it conflicts with standard gdb and binutils"
 
