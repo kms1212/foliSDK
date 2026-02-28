@@ -881,7 +881,7 @@ if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
 
     start_section "Configure gettext"
     ../gettext-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -897,7 +897,7 @@ if [ ! -f "$BUILDDIR/.build-gettext.stamp" ]; then
     end_section
 
     start_section "Install gettext"
-    make install
+    make install DESTDIR="$PKGBUILDDIR"
     end_section
 
     touch "$BUILDDIR/.build-gettext.stamp"
@@ -909,7 +909,7 @@ if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
 
     start_section "Configure gmp"
     ../gmp-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -925,7 +925,7 @@ if [ ! -f "$BUILDDIR/.build-gmp.stamp" ]; then
     end_section
 
     start_section "Install gmp"
-    make install
+    make install DESTDIR="$PKGBUILDDIR"
     end_section
 
     touch "$BUILDDIR/.build-gmp.stamp"
@@ -937,7 +937,7 @@ if [ ! -f "$BUILDDIR/.configure-mpfr.stamp" ]; then
 
     start_section "Configure mpfr"
     ../mpfr-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -953,7 +953,7 @@ if [ ! -f "$BUILDDIR/.build-mpfr.stamp" ]; then
     end_section
 
     start_section "Install mpfr"
-    make install
+    make install DESTDIR="$PKGBUILDDIR"
     end_section
 
     touch "$BUILDDIR/.build-mpfr.stamp"
@@ -965,7 +965,7 @@ if [ ! -f "$BUILDDIR/.configure-mpc.stamp" ]; then
 
     start_section "Configure mpc"
     ../mpc-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -981,7 +981,7 @@ if [ ! -f "$BUILDDIR/.build-mpc.stamp" ]; then
     end_section
 
     start_section "Install mpc"
-    make install
+    make install DESTDIR="$PKGBUILDDIR"
     end_section
 
     touch "$BUILDDIR/.build-mpc.stamp"
@@ -993,7 +993,7 @@ if [ ! -f "$BUILDDIR/.configure-isl.stamp" ]; then
 
     start_section "Configure isl"
     ../isl-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -1009,7 +1009,7 @@ if [ ! -f "$BUILDDIR/.build-isl.stamp" ]; then
     end_section
 
     start_section "Install isl"
-    make install
+    make install DESTDIR="$PKGBUILDDIR"
     end_section
 
     touch "$BUILDDIR/.build-isl.stamp"
@@ -1283,8 +1283,7 @@ for ARCH in "${ARCHS[@]}"; do
             --enable-libquadmath \
             --enable-__cxa_atexit \
             --enable-tls \
-            --enable-linker-build-id \
-            --enable-decimal-float=yes
+            --enable-linker-build-id
         end_section
 
         touch "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp"
