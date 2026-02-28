@@ -881,7 +881,7 @@ if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
 
     start_section "Configure gettext"
     ../gettext-src/configure \
-        --prefix="$PREFIX" \
+        --prefix="$PREFIX/$PKGBUILDDIR" \
         --disable-shared \
         --enable-static
     end_section
@@ -897,7 +897,7 @@ if [ ! -f "$BUILDDIR/.build-gettext.stamp" ]; then
     end_section
 
     start_section "Install gettext"
-    make install DESTDIR="$PKGBUILDDIR"
+    make install
     end_section
 
     touch "$BUILDDIR/.build-gettext.stamp"
@@ -909,7 +909,7 @@ if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
 
     start_section "Configure gmp"
     ../gmp-src/configure \
-        --prefix="$PREFIX" \
+        --prefix="$PREFIX/$PKGBUILDDIR" \
         --disable-shared \
         --enable-static
     end_section
@@ -925,7 +925,7 @@ if [ ! -f "$BUILDDIR/.build-gmp.stamp" ]; then
     end_section
 
     start_section "Install gmp"
-    make install DESTDIR="$PKGBUILDDIR"
+    make install
     end_section
 
     touch "$BUILDDIR/.build-gmp.stamp"
@@ -937,7 +937,7 @@ if [ ! -f "$BUILDDIR/.configure-mpfr.stamp" ]; then
 
     start_section "Configure mpfr"
     ../mpfr-src/configure \
-        --prefix="$PREFIX" \
+        --prefix="$PREFIX/$PKGBUILDDIR" \
         --disable-shared \
         --enable-static
     end_section
@@ -953,7 +953,7 @@ if [ ! -f "$BUILDDIR/.build-mpfr.stamp" ]; then
     end_section
 
     start_section "Install mpfr"
-    make install DESTDIR="$PKGBUILDDIR"
+    make install
     end_section
 
     touch "$BUILDDIR/.build-mpfr.stamp"
@@ -965,7 +965,7 @@ if [ ! -f "$BUILDDIR/.configure-mpc.stamp" ]; then
 
     start_section "Configure mpc"
     ../mpc-src/configure \
-        --prefix="$PREFIX" \
+        --prefix="$PREFIX/$PKGBUILDDIR" \
         --disable-shared \
         --enable-static
     end_section
@@ -981,7 +981,7 @@ if [ ! -f "$BUILDDIR/.build-mpc.stamp" ]; then
     end_section
 
     start_section "Install mpc"
-    make install DESTDIR="$PKGBUILDDIR"
+    make install
     end_section
 
     touch "$BUILDDIR/.build-mpc.stamp"
@@ -993,7 +993,7 @@ if [ ! -f "$BUILDDIR/.configure-isl.stamp" ]; then
 
     start_section "Configure isl"
     ../isl-src/configure \
-        --prefix="$PREFIX" \
+        --prefix="$PREFIX/$PKGBUILDDIR" \
         --disable-shared \
         --enable-static
     end_section
@@ -1009,7 +1009,7 @@ if [ ! -f "$BUILDDIR/.build-isl.stamp" ]; then
     end_section
 
     start_section "Install isl"
-    make install DESTDIR="$PKGBUILDDIR"
+    make install
     end_section
 
     touch "$BUILDDIR/.build-isl.stamp"
@@ -2218,11 +2218,61 @@ if [ ! -f "$BUILDDIR/.uninstall-libtool.stamp" ]; then
     touch "$BUILDDIR/.uninstall-libtool.stamp"
 fi
 
+if [ ! -f "$BUILDDIR/.uninstall-gettext.stamp" ]; then
+    cd "$BUILDDIR/gettext"
 
-if [ ! -f "$BUILDDIR/.cleanup.stamp" ]; then
+    start_section "Uninstalling gettext"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-gettext.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.uninstall-gmp.stamp" ]; then
+    cd "$BUILDDIR/gmp"
+
+    start_section "Uninstalling gmp"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-gmp.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.uninstall-mpfr.stamp" ]; then
+    cd "$BUILDDIR/mpfr"
+
+    start_section "Uninstalling mpfr"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-mpfr.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.uninstall-mpc.stamp" ]; then
+    cd "$BUILDDIR/mpc"
+
+    start_section "Uninstalling mpc"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-mpc.stamp"
+fi
+
+if [ ! -f "$BUILDDIR/.uninstall-isl.stamp" ]; then
+    cd "$BUILDDIR/isl"
+
+    start_section "Uninstalling isl"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-isl.stamp"
+fi
+
+
+if [ ! -f "$BUILDDIR/.cleanup-pass2.stamp" ]; then
     cd "$PKGBUILDDIR/$PREFIX"
 
-    start_section "Cleanup files & build paths"
+    start_section "Cleanup files & build paths (pass2)"
     find . -name "*.la" -delete
     if [ "$SED_TYPE" == "bsd" ]; then
         LC_ALL=C \
@@ -2234,7 +2284,7 @@ if [ ! -f "$BUILDDIR/.cleanup.stamp" ]; then
     fi
     end_section
 
-    touch "$BUILDDIR/.cleanup.stamp"
+    touch "$BUILDDIR/.cleanup-pass2.stamp"
 fi
 
 
