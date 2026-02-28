@@ -1057,7 +1057,7 @@ BUILD_TRIPLET=$("$ROOT/gnu-config-strata/config.guess")
 
 # macOS Framework Settings
 if [ "$OSNAME" == "Darwin" ]; then
-    ROOT_LDFLAGS="$ROOT_LDFLAGS -framework CoreFoundation"
+    ROOT_LDFLAGS="$ROOT_LDFLAGS -Wl,-framework,CoreFoundation"
 fi
 
 
