@@ -38,13 +38,13 @@ AUTOHEADER_HOST="$(which autoheader)"
 ARCHIVE_NAME="folisdk.tar.gz"
 ARCH_LIST=x86_64
 declare -a ARCHS
-PREFIX=
+DESTINATION=
 PARALLEL=
 BUILDDIR=$ROOT/build
 
 
 # Parse arguments
-GETOPT_OUTPUT=$("$GETOPT" -o "a:b:hj:o:p:" --long "arch:,build-dir:,help,jobs:,output:,prefix:" --name "$(basename "$0")" -- "$@")
+GETOPT_OUTPUT=$("$GETOPT" -o "a:b:hj:o:d:" --long "arch:,build-dir:,help,jobs:,output:,destination:" --name "$(basename "$0")" -- "$@")
 
 if [ $? != 0 ]; then
     exit 1
@@ -71,8 +71,8 @@ while :; do
             ARCHIVE_NAME="$2"
             shift 2
             ;;
-        -p | --prefix)
-            PREFIX="$2"
+        -d | --destination)
+            DESTINATION="$2"
             shift 2
             ;;
         -a | --arch)
@@ -98,11 +98,11 @@ IFS="," read -r -a ARCHS <<< "$ARCH_LIST"
 
 
 # Default Options
-if [ -z "$PREFIX" ]; then
+if [ -z "$DESTINATION" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
-        PREFIX="/opt/homebrew/opt/folisdk"
+        DESTINATION="/opt/homebrew/opt"
     else
-        PREFIX="/opt/folisdk"
+        DESTINATION="/opt"
     fi
 fi
 
@@ -148,10 +148,12 @@ end_section() {
 PKGBUILDDIR="$BUILDDIR/pkgroot"
 mkdir -p "$PKGBUILDDIR"
 
+HOST_PREFIX="$DESTINATION/folisdk-host"
+
 export M4="$M4"
-export PATH="$PKGBUILDDIR/$PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-export CPPFLAGS="-I$PKGBUILDDIR/$PREFIX/include"
-export LDFLAGS="-L$PKGBUILDDIR/$PREFIX/lib"
+export PATH="$PKGBUILDDIR/$HOST_PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export CPPFLAGS="-I$PKGBUILDDIR/$HOST_PREFIX/include"
+export LDFLAGS="-L$PKGBUILDDIR/$HOST_PREFIX/lib"
 unset LD_LIBRARY_PATH
 unset DYLD_LIBRARY_PATH
 unset C_INCLUDE_PATH
@@ -351,7 +353,7 @@ if [ ! -f "$BUILDDIR/.configure-libtool.stamp" ]; then
 
     start_section "Configure libtool"
     ../../libtool-strata/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --enable-ltdl-install
     end_section
 
@@ -377,8 +379,8 @@ if [ ! -f "$BUILDDIR/.build-libtool.stamp" ]; then
     touch "$BUILDDIR/.build-libtool.stamp"
 fi
 
-export LIBTOOL="$PKGBUILDDIR/$PREFIX/bin/libtool"
-export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/bin/libtoolize"
+export LIBTOOL="$PKGBUILDDIR/$HOST_PREFIX/bin/libtool"
+export LIBTOOLIZE="$PKGBUILDDIR/$HOST_PREFIX/bin/libtoolize"
 
 if [ ! -f "$BUILDDIR/.patch-gnulib.stamp" ]; then
     start_section "Patch gnulib"
@@ -413,7 +415,7 @@ if [ ! -f "$BUILDDIR/.patch-mpfr.stamp" ]; then
     start_section "Patch mpfr"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -431,7 +433,7 @@ if [ ! -f "$BUILDDIR/.patch-mpc.stamp" ]; then
     start_section "Patch mpc"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_1_15_HOST" \
     AUTOCONF="$AUTOCONF_2_69_HOST" \
     "$AUTORECONF_2_69_HOST" -ivf
@@ -467,7 +469,7 @@ if [ ! -f "$BUILDDIR/.patch-libsodium.stamp" ]; then
     start_section "Patch libsodium"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -485,7 +487,7 @@ if [ ! -f "$BUILDDIR/.patch-libffi.stamp" ]; then
     start_section "Patch libffi"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -525,7 +527,7 @@ if [ ! -f "$BUILDDIR/.patch-libxml2.stamp" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
         export PATH="$PATH:/opt/homebrew/bin"
     fi
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     AUTORECONF="$AUTORECONF_HOST" \
@@ -546,7 +548,7 @@ if [ ! -f "$BUILDDIR/.patch-libxslt.stamp" ]; then
     start_section "Patch libxslt"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -564,7 +566,7 @@ if [ ! -f "$BUILDDIR/.patch-libexpat.stamp" ]; then
     start_section "Patch libexpat"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -606,7 +608,7 @@ if [ ! -f "$BUILDDIR/.patch-xz.stamp" ]; then
     if [ "$OSNAME" == "Darwin" ]; then
         export PATH="$PATH:/opt/homebrew/bin"
     fi
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -645,7 +647,7 @@ if [ ! -f "$BUILDDIR/.patch-libarchive.stamp" ]; then
     start_section "Patch libarchive"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_HOST" \
     AUTOCONF="$AUTOCONF_HOST" \
     "$AUTORECONF_HOST" -ivf
@@ -696,7 +698,7 @@ if [ ! -f "$BUILDDIR/.patch-editline.stamp" ]; then
     start_section "Patch editline"
     "$LIBTOOLIZE" --force --copy
 
-    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$PREFIX/share/aclocal" \
+    ACLOCAL="$ACLOCAL_1_15_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
     AUTOMAKE="$AUTOMAKE_1_15_HOST" \
     AUTOCONF="$AUTOCONF_2_69_HOST" \
     "$AUTORECONF_2_69_HOST" -ivf
@@ -737,7 +739,7 @@ if [ ! -f "$BUILDDIR/.configure-pkgconfig.stamp" ]; then
     start_section "Configure pkgconfig"
     CFLAGS="-Wno-error=int-conversion" \
     ../pkgconfig-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --with-internal-glib \
         --disable-host-tool \
         --disable-debug
@@ -765,7 +767,7 @@ if [ ! -f "$BUILDDIR/.configure-zlib.stamp" ]; then
     cd "$BUILDDIR/zlib"
 
     start_section "Configure zlib"
-    ../zlib-src/configure --prefix="$PREFIX" --static
+    ../zlib-src/configure --prefix="$HOST_PREFIX" --static
     end_section
 
     touch "$BUILDDIR/.configure-zlib.stamp"
@@ -825,7 +827,7 @@ if [ ! -f "$BUILDDIR/.configure-cmake.stamp" ]; then
     cd "$BUILDDIR/cmake"
 
     start_section "Configure cmake"
-    ../../cmake-strata/bootstrap --prefix="$PREFIX" --parallel="$PARALLEL"
+    ../../cmake-strata/bootstrap --prefix="$HOST_PREFIX" --parallel="$PARALLEL"
     end_section
 
     touch "$BUILDDIR/.configure-cmake.stamp"
@@ -845,10 +847,10 @@ if [ ! -f "$BUILDDIR/.build-cmake.stamp" ]; then
     touch "$BUILDDIR/.build-cmake.stamp"
 fi
 
-export CMAKE="$PKGBUILDDIR/$PREFIX/bin/cmake"
-export CCMAKE="$PKGBUILDDIR/$PREFIX/bin/ccmake"
-export CTEST="$PKGBUILDDIR/$PREFIX/bin/ctest"
-export CPACK="$PKGBUILDDIR/$PREFIX/bin/cpack"
+export CMAKE="$PKGBUILDDIR/$HOST_PREFIX/bin/cmake"
+export CCMAKE="$PKGBUILDDIR/$HOST_PREFIX/bin/ccmake"
+export CTEST="$PKGBUILDDIR/$HOST_PREFIX/bin/ctest"
+export CPACK="$PKGBUILDDIR/$HOST_PREFIX/bin/cpack"
 
 if [ ! -f "$BUILDDIR/.configure-sidlc.stamp" ]; then
     mkdir -p "$BUILDDIR/sidlc"
@@ -856,7 +858,7 @@ if [ ! -f "$BUILDDIR/.configure-sidlc.stamp" ]; then
 
     start_section "Configure sidlc"
     "$CMAKE" -S../../sidlc -B. \
-        -DCMAKE_INSTALL_PREFIX="$PREFIX"
+        -DCMAKE_INSTALL_PREFIX="$HOST_PREFIX"
     end_section
 
     touch "$BUILDDIR/.configure-sidlc.stamp"
@@ -883,7 +885,7 @@ if [ ! -f "$BUILDDIR/.configure-libiconv.stamp" ]; then
 
     start_section "Configure libiconv"
     ../libiconv-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -911,10 +913,10 @@ if [ ! -f "$BUILDDIR/.configure-gettext.stamp" ]; then
 
     start_section "Configure gettext"
     ../gettext-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static \
-        --with-libiconv-prefix="$PKGBUILDDIR/$PREFIX"
+        --with-libiconv-prefix="$PKGBUILDDIR/$HOST_PREFIX"
     end_section
 
     touch "$BUILDDIR/.configure-gettext.stamp"
@@ -940,7 +942,7 @@ if [ ! -f "$BUILDDIR/.configure-gmp.stamp" ]; then
 
     start_section "Configure gmp"
     ../gmp-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -968,7 +970,7 @@ if [ ! -f "$BUILDDIR/.configure-mpfr.stamp" ]; then
 
     start_section "Configure mpfr"
     ../mpfr-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -996,7 +998,7 @@ if [ ! -f "$BUILDDIR/.configure-mpc.stamp" ]; then
 
     start_section "Configure mpc"
     ../mpc-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -1024,7 +1026,7 @@ if [ ! -f "$BUILDDIR/.configure-isl.stamp" ]; then
 
     start_section "Configure isl"
     ../isl-src/configure \
-        --prefix="$PKGBUILDDIR/$PREFIX" \
+        --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
         --disable-shared \
         --enable-static
     end_section
@@ -1049,6 +1051,7 @@ fi
 unset LIBTOOL
 unset LIBTOOLIZE
 
+ROOT_PATH="$PATH"
 ROOT_CPPFLAGS="$CPPFLAGS"
 ROOT_LDFLAGS="$LDFLAGS"
 
@@ -1064,11 +1067,13 @@ fi
 for ARCH in "${ARCHS[@]}"; do
     # Per-Target Build Settings
     TARGET_TRIPLET="$ARCH-strata-folios"
-    SYSROOT="$PREFIX/$TARGET_TRIPLET/sysroot"
+    ARCH_PREFIX="$DESTINATION/folisdk-$ARCH"
+    SYSROOT="$ARCH_PREFIX/$TARGET_TRIPLET/sysroot"
 
+    export PATH="$PKGBUILDDIR/$ARCH_PREFIX/bin:$ROOT_PATH"
     export PKG_CONFIG_PATH=""
-    export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$PREFIX/lib/pkgconfig:$PKGBUILDDIR/$PREFIX/share/pkgconfig"
-    export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$PREFIX"
+    export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/pkgconfig:$PKGBUILDDIR/$HOST_PREFIX/share/pkgconfig"
+    export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$HOST_PREFIX"
     unset CPPFLAGS
     unset LDFLAGS
     unset PKG_CONFIG_ALLOW_SYSTEM_CFLAGS
@@ -1088,11 +1093,12 @@ for ARCH in "${ARCHS[@]}"; do
         ../../binutils-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
-            --prefix="$PREFIX" \
-            --with-gmp="$PKGBUILDDIR/$PREFIX" \
-            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
-            --with-mpc="$PKGBUILDDIR/$PREFIX" \
-            --with-isl="$PKGBUILDDIR/$PREFIX" \
+            --prefix="$ARCH_PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-isl="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-libintl-prefix="$PKGBUILDDIR/$HOST_PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
             --with-system-zlib \
@@ -1144,11 +1150,11 @@ for ARCH in "${ARCHS[@]}"; do
         ../../gcc-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
-            --prefix="$PREFIX" \
-            --with-gmp="$PKGBUILDDIR/$PREFIX" \
-            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
-            --with-mpc="$PKGBUILDDIR/$PREFIX" \
-            --with-isl="$PKGBUILDDIR/$PREFIX" \
+            --prefix="$ARCH_PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-isl="$PKGBUILDDIR/$HOST_PREFIX" \
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
             --with-system-zlib \
@@ -1235,18 +1241,18 @@ for ARCH in "${ARCHS[@]}"; do
         if [ "$OSNAME" == "Darwin" ]; then
             export PATH="$PATH:/opt/homebrew/bin"
         fi
-        CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" \
-        CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" \
-        AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
-        NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-nm" \
-        AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-as" \
-        LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld" \
-        STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-strip" \
+        CC="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc" \
+        CXX="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc" \
+        AR="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
+        NM="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-nm" \
+        AS="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-as" \
+        LD="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-ld" \
+        STRIP="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-strip" \
         RANLIB="true" \
         ../../libtool-strata/configure \
             --build="$BUILD_TRIPLET" \
-            --prefix="$PKGBUILDDIR/$PREFIX" \
-            --exec-prefix="$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET" \
+            --prefix="$PKGBUILDDIR/$ARCH_PREFIX" \
+            --exec-prefix="$PKGBUILDDIR/$ARCH_PREFIX/$TARGET_TRIPLET" \
             --host="$TARGET_TRIPLET" \
             --enable-ltdl-install \
             --enable-shared \
@@ -1272,22 +1278,22 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Install libtool (pass1)"
         make install
-        ln -s "../$TARGET_TRIPLET/bin/libtool" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
-        ln -s "../$TARGET_TRIPLET/bin/libtoolize" "$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
+        ln -s "../$TARGET_TRIPLET/bin/libtool" "$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-libtool"
+        ln -s "../$TARGET_TRIPLET/bin/libtoolize" "$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-libtoolize"
         end_section
 
         touch "$BUILDDIR/.build-libtool-pass1-$ARCH.stamp"
     fi
 
-    export LIBTOOL="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtool"
-    export LIBTOOLIZE="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-libtoolize"
+    export LIBTOOL="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-libtool"
+    export LIBTOOLIZE="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-libtoolize"
 
     if [ ! -f "$BUILDDIR/.configure-gcc-pass2-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gcc-pass2-$ARCH"
         cd "$BUILDDIR/gcc-pass2-$ARCH"
 
         start_section "Configure GCC (pass2)"
-        AR_FOR_TARGET="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
+        AR_FOR_TARGET="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-ld -r -o" \
         RANLIB_FOR_TARGET="true" \
         CFLAGS="$ROOT_CPPFLAGS" \
         CXXFLAGS="$ROOT_CPPFLAGS" \
@@ -1295,11 +1301,12 @@ for ARCH in "${ARCHS[@]}"; do
         ../../gcc-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
-            --prefix="$PREFIX" \
-            --with-gmp="$PKGBUILDDIR/$PREFIX" \
-            --with-mpfr="$PKGBUILDDIR/$PREFIX" \
-            --with-mpc="$PKGBUILDDIR/$PREFIX" \
-            --with-isl="$PKGBUILDDIR/$PREFIX" \
+            --prefix="$ARCH_PREFIX" \
+            --with-gmp="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpfr="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-mpc="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-isl="$PKGBUILDDIR/$HOST_PREFIX" \
+            --with-libintl-prefix="$PKGBUILDDIR/$HOST_PREFIX" \
             --with-build-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --with-sysroot="$SYSROOT" \
             --with-native-system-header-dir="/usr/include" \
@@ -1348,14 +1355,14 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Make GCC (pass2) - libstdc++"
         make -j"$PARALLEL" all-target-libstdc++-v3 \
-            LDFLAGS_FOR_TARGET="-L$PKGBUILDDIR/$PREFIX/$TARGET_TRIPLET/lib"
+            LDFLAGS_FOR_TARGET="-L$PKGBUILDDIR/$ARCH_PREFIX/$TARGET_TRIPLET/lib"
         end_section
 
         start_section "Install GCC (pass2) - libstdc++"
         make install-target-libstdc++-v3 DESTDIR="$PKGBUILDDIR"
         end_section
         
-        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc" -print-file-name=include)
+        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc" -print-file-name=include)
         cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
 
         touch "$BUILDDIR/.build-gcc-pass2-$ARCH.stamp"
@@ -1409,14 +1416,14 @@ for ARCH in "${ARCHS[@]}"; do
     export PKG_CONFIG_LIBDIR="$PKGBUILDDIR/$SYSROOT/usr/lib/pkgconfig:$PKGBUILDDIR/$SYSROOT/usr/share/pkgconfig"
     export PKG_CONFIG_SYSROOT_DIR="$PKGBUILDDIR/$SYSROOT"
 
-    export CC="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
-    export CXX="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-gcc"
-    export AR="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld -r -o"
-    export AS="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-as"
-    export OBJCOPY="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-objcopy"
-    export LD="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-ld"
-    export NM="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-nm"
-    export STRIP="$PKGBUILDDIR/$PREFIX/bin/$TARGET_TRIPLET-strip"
+    export CC="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc"
+    export CXX="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc"
+    export AR="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-ld -r -o"
+    export AS="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-as"
+    export OBJCOPY="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-objcopy"
+    export LD="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-ld"
+    export NM="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-nm"
+    export STRIP="$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-strip"
     export RANLIB="true"
 
     export CC_FOR_BUILD="cc"
@@ -1749,7 +1756,7 @@ for ARCH in "${ARCHS[@]}"; do
         start_section "Configure yyjson"
         "$CMAKE" -S../yyjson-src -B. \
             -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/$TARGET_TRIPLET.cmake" \
-            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$PREFIX" \
+            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$ARCH_PREFIX" \
             -DCMAKE_INSTALL_PREFIX="/usr" \
             -DCMAKE_SYSROOT="$PKGBUILDDIR/$SYSROOT" \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -2192,8 +2199,8 @@ for ARCH in "${ARCHS[@]}"; do
         fi
         ../../libtool-strata/configure \
             --build="$BUILD_TRIPLET" \
-            --prefix="$PREFIX" \
-            --exec-prefix="$PREFIX/$TARGET_TRIPLET" \
+            --prefix="$ARCH_PREFIX" \
+            --exec-prefix="$ARCH_PREFIX/$TARGET_TRIPLET" \
             --host="$TARGET_TRIPLET" \
             --enable-ltdl-install \
             --enable-shared \
@@ -2224,6 +2231,35 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libtool-pass2-$ARCH.stamp"
     fi
 
+    if [ ! -f "$BUILDDIR/.cleanup-pass2-$ARCH.stamp" ]; then
+        cd "$PKGBUILDDIR/$ARCH_PREFIX"
+
+        start_section "Cleanup files & build paths (pass2)"
+        find . -name "*.la" -delete
+        if [ "$SED_TYPE" == "bsd" ]; then
+            LC_ALL=C \
+            find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
+                -exec sed -i '' "s|$PKGBUILDDIR||g" {} +
+        else
+            find . -type f \( -name "*.pc" -o -name "libtool" -o -name "libtoolize" -o -name "*-config" -o -name "*.h" \) \
+                -exec sed -i "s|$PKGBUILDDIR||g" {} +
+        fi
+        end_section
+
+        touch "$BUILDDIR/.cleanup-pass2-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.archive-$ARCH.stamp" ]; then
+        cd "$PKGBUILDDIR/$ARCH_PREFIX"
+
+        start_section "Make archive"
+        tar -czvf "$BUILDDIR/folisdk-$ARCH.tar.gz" .
+        end_section
+
+        touch "$BUILDDIR/.archive-$ARCH.stamp"
+    fi
+
+
     unset PKG_CONFIG_PATH
     unset PKG_CONFIG_LIBDIR
     unset PKG_CONFIG_SYSROOT_DIR
@@ -2245,6 +2281,16 @@ for ARCH in "${ARCHS[@]}"; do
     unset AR_FOR_BUILD
     unset RANLIB_FOR_BUILD
 done
+
+if [ ! -f "$BUILDDIR/.uninstall-pkgconfig.stamp" ]; then
+    cd "$BUILDDIR/pkgconfig"
+
+    start_section "Uninstalling pkgconfig"
+    make uninstall
+    end_section
+
+    touch "$BUILDDIR/.uninstall-pkgconfig.stamp"
+fi
 
 if [ ! -f "$BUILDDIR/.uninstall-libtool.stamp" ]; then
     cd "$BUILDDIR/libtool"
@@ -2317,10 +2363,10 @@ if [ ! -f "$BUILDDIR/.uninstall-isl.stamp" ]; then
 fi
 
 
-if [ ! -f "$BUILDDIR/.cleanup-pass2.stamp" ]; then
-    cd "$PKGBUILDDIR/$PREFIX"
+if [ ! -f "$BUILDDIR/.cleanup-host.stamp" ]; then
+    cd "$PKGBUILDDIR/$HOST_PREFIX"
 
-    start_section "Cleanup files & build paths (pass2)"
+    start_section "Cleanup files & build paths"
     find . -name "*.la" -delete
     if [ "$SED_TYPE" == "bsd" ]; then
         LC_ALL=C \
@@ -2332,16 +2378,16 @@ if [ ! -f "$BUILDDIR/.cleanup-pass2.stamp" ]; then
     fi
     end_section
 
-    touch "$BUILDDIR/.cleanup-pass2.stamp"
+    touch "$BUILDDIR/.cleanup-host.stamp"
 fi
 
 
-if [ ! -f "$BUILDDIR/.archive.stamp" ]; then
-    cd "$PKGBUILDDIR/$PREFIX"
+if [ ! -f "$BUILDDIR/.archive-host.stamp" ]; then
+    cd "$PKGBUILDDIR/$HOST_PREFIX"
 
-    start_section "Make archive"
-    tar -czvf "$BUILDDIR/$ARCHIVE_NAME" .
+    start_section "Make host archive"
+    tar -czvf "$BUILDDIR/folisdk-host.tar.gz" .
     end_section
 
-    touch "$BUILDDIR/.archive.stamp"
+    touch "$BUILDDIR/.archive-host.stamp"
 fi
