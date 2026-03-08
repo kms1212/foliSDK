@@ -1,21 +1,20 @@
-#include <stdio.h>
+#include <stddef.h>
 
-#include "byte_stream.h"
+#include <strata/krt.h>
+#include <strata/status.h>
+#include <strata/handle.h>
 
-StStatus StKrt_Call(StHandle handle __in, uint32_t funcid __in, const void *args __buf, size_t args_size __in, void *result __buf, size_t result_size __in)
-{
-    return STATUS_UNIMPLEMENTED;
-}
+#include "sidl/byte_stream.h"
 
-StStatus __get_func_id_base(StHandle handle __in, const struct StUuid *uuid __in, uint32_t request_groupid __in, uint32_t request_abiver __in, uint32_t *funcid_base __out, uint32_t *result_abiver __out)
-{
-    return STATUS_UNIMPLEMENTED;
-}
+extern StHandle __stdout_handle;
 
 int main(int argc, char **argv, char **envp)
 {
-    StIfBs_Read(0, NULL, 0, 0, NULL);
+    StStatus status;
 
-    printf("Hello, world!");
+    status = StIfBs_Write(__stdout_handle, (const uint8_t *)"Hello, world!", 13, 0, NULL);
+    if (status != STATUS_SUCCESS) {
+        return 1;
+    }
     return 0;
-}   
+}

@@ -1,0 +1,7 @@
+Package: folisdk-host
+Version: @VERSION@
+Architecture: @ARCH@
+Essential: no
+Priority: optional
+Maintainer: kms1212 <kms1212g@gmail.com>
+Description: foliSDK Host Utilities

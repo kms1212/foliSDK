@@ -1,9 +1,18 @@
 class FolisdkI686 < Formula
   desc "foliSDK for i686"
   homepage "https://github.com/kms1212/folisdk"
-  url "file://#{Dir.pwd}/build/folisdk-i686.tar.gz"
-  version "0.0.1"
-  sha256 "3ff0b3aa77d599c73d9bc03d5d4f29d3860cc10f24abc15ed85b3b532e51f13c"
+  version "@VERSION@"
+
+  if Hardware::CPU.arm? && OS.mac?
+    url "@URL_MACOS_ARM64@"
+    sha256 "@SHA256_MACOS_ARM64@"
+  elsif Hardware::CPU.intel? && OS.mac?
+    url "@URL_MACOS_X86_64@"
+    sha256 "@SHA256_MACOS_X86_64@"
+  elsif Hardware::CPU.intel? && OS.linux?
+    url "@URL_LINUX_X86_64@"
+    sha256 "@SHA256_LINUX_X86_64@"
+  end
   
   depends_on "folisdk-host"
 

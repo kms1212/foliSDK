@@ -1,0 +1,8 @@
+Package: folisdk-i686
+Version: @VERSION@
+Architecture: @ARCH@
+Essential: no
+Priority: optional
+Depends: folisdk-host
+Maintainer: kms1212 <kms1212g@gmail.com>
+Description: foliSDK for i686

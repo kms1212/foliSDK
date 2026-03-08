@@ -35,16 +35,16 @@ AUTOHEADER_HOST="$(which autoheader)"
 
 
 # Option Variables
-ARCHIVE_NAME="folisdk.tar.gz"
 ARCH_LIST=x86_64
 declare -a ARCHS
 DESTINATION=
 PARALLEL=
 BUILDDIR=$ROOT/build
+NO_LIBS=
 
 
 # Parse arguments
-GETOPT_OUTPUT=$("$GETOPT" -o "a:b:hj:o:d:" --long "arch:,build-dir:,help,jobs:,output:,destination:" --name "$(basename "$0")" -- "$@")
+GETOPT_OUTPUT=$("$GETOPT" -o "a:b:hj:nd:" --long "arch:,build-dir:,help,jobs:,no-libs:,destination:" --name "$(basename "$0")" -- "$@")
 
 if [ $? != 0 ]; then
     exit 1
@@ -60,15 +60,12 @@ while :; do
             echo "  -a, --arch <arch>[,...]       Set the target architecture"
             echo "  -b, --build-dir <path>        Set the build directory"
             echo "  -j, --jobs <number>           Set the number of jobs"
+            echo "  -n, --no-libs                 Do not build additional libraries"
             echo "  -p, --prefix <path>           Set the prefix directory"
             exit 0
             ;;
         -b | --build-dir)
             BUILDDIR="$2"
-            shift 2
-            ;;
-        -o | --output)
-            ARCHIVE_NAME="$2"
             shift 2
             ;;
         -d | --destination)
@@ -82,6 +79,10 @@ while :; do
         -j | --jobs)
             PARALLEL="$2"
             shift 2
+            ;;
+        -n | --no-libs)
+            NO_LIBS=true
+            shift
             ;;
         --)
             shift
@@ -879,6 +880,9 @@ if [ ! -f "$BUILDDIR/.build-sidlc.stamp" ]; then
     touch "$BUILDDIR/.build-sidlc.stamp"
 fi
 
+export SIDLC="$PKGBUILDDIR/$HOST_PREFIX/bin/sidlc"
+export SIDLC_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/sidl"
+
 if [ ! -f "$BUILDDIR/.configure-libiconv.stamp" ]; then
     mkdir -p "$BUILDDIR/libiconv"
     cd "$BUILDDIR/libiconv"
@@ -1193,7 +1197,43 @@ for ARCH in "${ARCHS[@]}"; do
         make install-target-libgcc DESTDIR="$PKGBUILDDIR"
         end_section
 
+        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc" -print-file-name=include)
+        cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint.h"
+
         touch "$BUILDDIR/.build-gcc-pass1-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.configure-libstrata-$ARCH.stamp" ]; then
+        mkdir -p "$BUILDDIR/libstrata-$ARCH"
+        cd "$BUILDDIR/libstrata-$ARCH"
+
+        start_section "Configure libstrata"
+        "$CMAKE" -S../../libstrata -B. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/$TARGET_TRIPLET.cmake" \
+            -DCMAKE_FIND_ROOT_PATH="$PKGBUILDDIR/$ARCH_PREFIX" \
+            -DCMAKE_INSTALL_PREFIX="/usr" \
+            -DCMAKE_C_FLAGS="-ffreestanding -nostdlib" \
+            -DCMAKE_SYSROOT="$PKGBUILDDIR/$SYSROOT" \
+            -DBUILD_SHARED_LIBS=ON
+        end_section
+
+        touch "$BUILDDIR/.configure-libstrata-$ARCH.stamp"
+    fi
+
+    if [ ! -f "$BUILDDIR/.build-libstrata-$ARCH.stamp" ]; then
+        cd "$BUILDDIR/libstrata-$ARCH"
+
+        start_section "Make libstrata"
+        "$CMAKE" --build . --parallel="$PARALLEL"
+        end_section
+
+        start_section "Install libstrata"
+        DESTDIR="$PKGBUILDDIR/$SYSROOT" \
+        "$CMAKE" --install .
+        end_section
+
+        touch "$BUILDDIR/.build-libstrata-$ARCH.stamp"
     fi
 
     if [ ! -f "$BUILDDIR/.configure-musl-pass1-$ARCH.stamp" ]; then
@@ -1205,10 +1245,11 @@ for ARCH in "${ARCHS[@]}"; do
         ../../musl-strata/configure \
             --build="$BUILD_TRIPLET" \
             --target="$TARGET_TRIPLET" \
-            --with-sysroot="$SYSROOT" \
             --prefix="/usr" \
             --disable-shared \
-            --disable-gcc-wrapper
+            --disable-gcc-wrapper \
+            CFLAGS="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
+            SIDLC_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/sidl"
         end_section
 
         touch "$BUILDDIR/.configure-musl-pass1-$ARCH.stamp"
@@ -1362,9 +1403,6 @@ for ARCH in "${ARCHS[@]}"; do
         make install-target-libstdc++-v3 DESTDIR="$PKGBUILDDIR"
         end_section
         
-        GCC_BUILTIN_INCLUDE_PATH=$("$PKGBUILDDIR/$ARCH_PREFIX/bin/$TARGET_TRIPLET-gcc" -print-file-name=include)
-        cp "../../gcc-strata/gcc/ginclude/stdint-gcc.h" "$GCC_BUILTIN_INCLUDE_PATH/stdint-gcc.h"
-
         touch "$BUILDDIR/.build-gcc-pass2-$ARCH.stamp"
     fi
 
@@ -1386,10 +1424,12 @@ for ARCH in "${ARCHS[@]}"; do
         CROSS_COMPILE="$TARGET_TRIPLET-" \
         ../../musl-strata/configure \
             --build="$BUILD_TRIPLET" \
-            --with-sysroot="$SYSROOT" \
             --target="$TARGET_TRIPLET" \
             --prefix="/usr" \
-            --disable-gcc-wrapper
+            --disable-gcc-wrapper \
+            --enable-debug \
+            CFLAGS="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
+            SIDLC_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/sidl"
         end_section
 
         touch "$BUILDDIR/.configure-musl-pass2-$ARCH.stamp"
@@ -1433,7 +1473,7 @@ for ARCH in "${ARCHS[@]}"; do
     export AR_FOR_BUILD="ar"
     export RANLIB_FOR_BUILD="ranlib"
 
-    if [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-gmp-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/gmp-$ARCH"
         cd "$BUILDDIR/gmp-$ARCH"
 
@@ -1451,7 +1491,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-gmp-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-gmp-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-gmp-$ARCH.stamp" ]; then
         cd "$BUILDDIR/gmp-$ARCH"
 
         start_section "Make gmp"
@@ -1465,7 +1505,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-gmp-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-mpfr-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-mpfr-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/mpfr-$ARCH"
         cd "$BUILDDIR/mpfr-$ARCH"
 
@@ -1482,7 +1522,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-mpfr-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-mpfr-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-mpfr-$ARCH.stamp" ]; then
         cd "$BUILDDIR/mpfr-$ARCH"
 
         start_section "Make mpfr"
@@ -1496,7 +1536,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-mpfr-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-mpc-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-mpc-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/mpc-$ARCH"
         cd "$BUILDDIR/mpc-$ARCH"
 
@@ -1513,7 +1553,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-mpc-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-mpc-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-mpc-$ARCH.stamp" ]; then
         cd "$BUILDDIR/mpc-$ARCH"
 
         start_section "Make mpc"
@@ -1527,7 +1567,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-mpc-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-nettle-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-nettle-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/nettle-$ARCH"
         cd "$BUILDDIR/nettle-$ARCH"
 
@@ -1545,7 +1585,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-nettle-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-nettle-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-nettle-$ARCH.stamp" ]; then
         cd "$BUILDDIR/nettle-$ARCH"
 
         start_section "Make Nettle"
@@ -1559,7 +1599,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-nettle-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libsodium-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libsodium-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libsodium-$ARCH"
         cd "$BUILDDIR/libsodium-$ARCH"
 
@@ -1576,7 +1616,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libsodium-$ARCH.stamp"
     fi
     
-    if [ ! -f "$BUILDDIR/.build-libsodium-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libsodium-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libsodium-$ARCH"
 
         start_section "Make libsodium"
@@ -1590,7 +1630,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libsodium-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libffi-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libffi-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libffi-$ARCH"
         cd "$BUILDDIR/libffi-$ARCH"
 
@@ -1607,7 +1647,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libffi-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libffi-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libffi-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libffi-$ARCH"
 
         start_section "Make libffi"
@@ -1621,7 +1661,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libffi-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libuv-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libuv-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libuv-$ARCH"
         cd "$BUILDDIR/libuv-$ARCH"
 
@@ -1639,7 +1679,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libuv-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libuv-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libuv-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libuv-$ARCH"
 
         start_section "Make libuv"
@@ -1653,7 +1693,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libuv-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libxml2-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libxml2-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libxml2-$ARCH"
         cd "$BUILDDIR/libxml2-$ARCH"
 
@@ -1670,7 +1710,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libxml2-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libxml2-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libxml2-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libxml2-$ARCH"
 
         start_section "Make libxml2"
@@ -1684,7 +1724,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libxml2-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libxslt-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libxslt-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libxslt-$ARCH"
         cd "$BUILDDIR/libxslt-$ARCH"
 
@@ -1704,7 +1744,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libxslt-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libxslt-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libxslt-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libxslt-$ARCH"
 
         start_section "Make libxslt"
@@ -1718,7 +1758,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libxslt-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libexpat-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libexpat-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libexpat-$ARCH"
         cd "$BUILDDIR/libexpat-$ARCH"
 
@@ -1735,7 +1775,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libexpat-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libexpat-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libexpat-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libexpat-$ARCH"
 
         start_section "Make libexpat"
@@ -1749,7 +1789,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libexpat-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-yyjson-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/yyjson-$ARCH"
         cd "$BUILDDIR/yyjson-$ARCH"
 
@@ -1767,7 +1807,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-yyjson-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-yyjson-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-yyjson-$ARCH.stamp" ]; then
         cd "$BUILDDIR/yyjson-$ARCH"
 
         start_section "Make yyjson"
@@ -1782,7 +1822,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-yyjson-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-zlib-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-zlib-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/zlib-$ARCH"
         cd "$BUILDDIR/zlib-$ARCH"
 
@@ -1794,7 +1834,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-zlib-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-zlib-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-zlib-$ARCH.stamp" ]; then
         cd "$BUILDDIR/zlib-$ARCH"
 
         start_section "Make zlib"
@@ -1811,7 +1851,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-zlib-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-bzip2-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-bzip2-$ARCH.stamp" ]; then
         cd "$BUILDDIR"
 
         start_section "Configure bzip2"
@@ -1823,7 +1863,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-bzip2-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-bzip2-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-bzip2-$ARCH.stamp" ]; then
         cd "$BUILDDIR/bzip2-$ARCH"
 
         start_section "Make bzip2"
@@ -1845,7 +1885,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-bzip2-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-xz-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-xz-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/xz-$ARCH"
         cd "$BUILDDIR/xz-$ARCH"
 
@@ -1862,7 +1902,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-xz-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-xz-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-xz-$ARCH.stamp" ]; then
         cd "$BUILDDIR/xz-$ARCH"
 
         start_section "Make xz"
@@ -1876,7 +1916,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-xz-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-lz4-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-lz4-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR"
         cd "$BUILDDIR"
 
@@ -1889,7 +1929,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-lz4-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-lz4-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-lz4-$ARCH.stamp" ]; then
         cd "$BUILDDIR/lz4-$ARCH"
 
         start_section "Make lz4 library"
@@ -1911,7 +1951,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-lz4-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-zstd-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-zstd-$ARCH.stamp" ]; then
         cd "$BUILDDIR"
 
         start_section "Configure zstd"
@@ -1923,7 +1963,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-zstd-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-zstd-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-zstd-$ARCH.stamp" ]; then
         cd "$BUILDDIR/zstd-$ARCH"
 
         start_section "Make zstd library"
@@ -1954,7 +1994,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-zstd-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libarchive-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libarchive-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libarchive-$ARCH"
         cd "$BUILDDIR/libarchive-$ARCH"
 
@@ -1982,7 +2022,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libarchive-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libarchive-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libarchive-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libarchive-$ARCH"
 
         start_section "Make libarchive"
@@ -1996,7 +2036,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libarchive-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-libiconv-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-libiconv-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/libiconv-$ARCH"
         cd "$BUILDDIR/libiconv-$ARCH"
 
@@ -2016,7 +2056,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-libiconv-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-libiconv-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-libiconv-$ARCH.stamp" ]; then
         cd "$BUILDDIR/libiconv-$ARCH"
 
         start_section "Make libiconv"
@@ -2030,7 +2070,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-libiconv-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-ncurses-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-ncurses-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/ncurses-$ARCH"
         cd "$BUILDDIR/ncurses-$ARCH"
 
@@ -2058,7 +2098,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-ncurses-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-ncurses-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-ncurses-$ARCH.stamp" ]; then
         cd "$BUILDDIR/ncurses-$ARCH"
 
         start_section "Make ncurses"
@@ -2073,7 +2113,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-ncurses-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-editline-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-editline-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/editline-$ARCH"
         cd "$BUILDDIR/editline-$ARCH"
 
@@ -2091,7 +2131,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-editline-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-editline-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-editline-$ARCH.stamp" ]; then
         cd "$BUILDDIR/editline-$ARCH"
 
         start_section "Make editline"
@@ -2105,7 +2145,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-editline-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-readline-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-readline-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/readline-$ARCH"
         cd "$BUILDDIR/readline-$ARCH"
 
@@ -2125,7 +2165,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-readline-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-readline-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-readline-$ARCH.stamp" ]; then
         cd "$BUILDDIR/readline-$ARCH"
 
         start_section "Make readline"
@@ -2139,7 +2179,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.build-readline-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.configure-sqlite3-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.configure-sqlite3-$ARCH.stamp" ]; then
         mkdir -p "$BUILDDIR/sqlite3-$ARCH"
         cd "$BUILDDIR/sqlite3-$ARCH"
 
@@ -2163,7 +2203,7 @@ for ARCH in "${ARCHS[@]}"; do
         touch "$BUILDDIR/.configure-sqlite3-$ARCH.stamp"
     fi
 
-    if [ ! -f "$BUILDDIR/.build-sqlite3-$ARCH.stamp" ]; then
+    if [ -z "$NO_LIBS" ] && [ ! -f "$BUILDDIR/.build-sqlite3-$ARCH.stamp" ]; then
         cd "$BUILDDIR/sqlite3-$ARCH"
 
         start_section "Make sqlite3"
@@ -2247,16 +2287,6 @@ for ARCH in "${ARCHS[@]}"; do
         end_section
 
         touch "$BUILDDIR/.cleanup-pass2-$ARCH.stamp"
-    fi
-
-    if [ ! -f "$BUILDDIR/.archive-$ARCH.stamp" ]; then
-        cd "$PKGBUILDDIR/$ARCH_PREFIX"
-
-        start_section "Make archive"
-        tar -czvf "$BUILDDIR/folisdk-$ARCH.tar.gz" .
-        end_section
-
-        touch "$BUILDDIR/.archive-$ARCH.stamp"
     fi
 
 
@@ -2379,15 +2409,4 @@ if [ ! -f "$BUILDDIR/.cleanup-host.stamp" ]; then
     end_section
 
     touch "$BUILDDIR/.cleanup-host.stamp"
-fi
-
-
-if [ ! -f "$BUILDDIR/.archive-host.stamp" ]; then
-    cd "$PKGBUILDDIR/$HOST_PREFIX"
-
-    start_section "Make host archive"
-    tar -czvf "$BUILDDIR/folisdk-host.tar.gz" .
-    end_section
-
-    touch "$BUILDDIR/.archive-host.stamp"
 fi

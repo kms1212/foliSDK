@@ -1,9 +1,18 @@
 class FolisdkHost < Formula
   desc "foliSDK Host Utilities"
   homepage "https://github.com/kms1212/folisdk"
-  url "file://#{Dir.pwd}/build/folisdk-host.tar.gz"
-  version "0.0.1"
-  sha256 "3ff0b3aa77d599c73d9bc03d5d4f29d3860cc10f24abc15ed85b3b532e51f13c"
+  version "@VERSION@"
+
+  if Hardware::CPU.arm? && OS.mac?
+    url "@URL_MACOS_ARM64@"
+    sha256 "@SHA256_MACOS_ARM64@"
+  elsif Hardware::CPU.intel? && OS.mac?
+    url "@URL_MACOS_X86_64@"
+    sha256 "@SHA256_MACOS_X86_64@"
+  elsif Hardware::CPU.intel? && OS.linux?
+    url "@URL_LINUX_X86_64@"
+    sha256 "@SHA256_LINUX_X86_64@"
+  end
   
   keg_only "it conflicts with standard cmake"
 
@@ -39,7 +48,7 @@ class FolisdkHost < Formula
 
           local target="${arch}-strata-folios"
           local host_prefix="#{opt_prefix}"
-          local arch_prefix="#{opt_prefix}/../folisdk-${arch}"
+          local arch_prefix="#{HOMEBREW_PREFIX}/opt/folisdk-${arch}"
           local sdk_host_bin="${host_prefix}/bin"
           local sdk_arch_bin="${arch_prefix}/bin"
           local sysroot="${arch_prefix}/${target}/sysroot"
@@ -65,21 +74,6 @@ class FolisdkHost < Formula
           export FOLISDK_ACTIVE="${arch}"
           
           if [ "$path_only" = "false" ]; then
-              export CROSS_COMPILE="${target}-"
-              export CC="${target}-gcc"
-              export CXX="${target}-g++"
-              export AS="${target}-as"
-              export LD="${target}-ld"
-              export NM="${target}-nm"
-              export STRIP="${target}-strip"
-              export AR="${target}-ld -r -o"
-              export RANLIB="true"
-              
-              export SYSROOT="$sysroot"
-              export PKG_CONFIG_DIR=""
-              export PKG_CONFIG_LIBDIR="${sysroot}/usr/lib/pkgconfig:${sysroot}/usr/share/pkgconfig"
-              export PKG_CONFIG_SYSROOT_DIR="${sysroot}"
-
               export _OLD_FOLISDK_CROSS_COMPILE="$CROSS_COMPILE"
               export _OLD_FOLISDK_CC="$CC"
               export _OLD_FOLISDK_CXX="$CXX"
@@ -94,6 +88,21 @@ class FolisdkHost < Formula
               export _OLD_FOLISDK_PKG_CONFIG_DIR="$PKG_CONFIG_DIR"
               export _OLD_FOLISDK_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
               export _OLD_FOLISDK_PKG_CONFIG_SYSROOT_DIR="$PKG_CONFIG_SYSROOT_DIR"
+
+              export CROSS_COMPILE="${target}-"
+              export CC="${target}-gcc"
+              export CXX="${target}-g++"
+              export AS="${target}-as"
+              export LD="${target}-ld"
+              export NM="${target}-nm"
+              export STRIP="${target}-strip"
+              export AR="${target}-ld -r -o"
+              export RANLIB="true"
+              
+              export SYSROOT="$sysroot"
+              export PKG_CONFIG_DIR=""
+              export PKG_CONFIG_LIBDIR="${sysroot}/usr/lib/pkgconfig:${sysroot}/usr/share/pkgconfig"
+              export PKG_CONFIG_SYSROOT_DIR="${sysroot}"
           fi
 
           export PS1="(folisdk-${arch}) $PS1"

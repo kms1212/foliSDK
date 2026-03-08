@@ -7,6 +7,7 @@ include(UseSIDLC)
 
 # SIDL Compilations
 sidl_generate_c(
+    HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/sidl"
     SRCS_VAR SIDL_SRCS
     HDRS_VAR SIDL_HDRS
     FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
@@ -28,7 +29,6 @@ target_compile_options(test_native PUBLIC
         -pedantic-errors
     >
 )
-target_link_options(test_native PRIVATE "-Wl,--gc-sections")
 
 target_include_directories(test_native PRIVATE "${CMAKE_SOURCE_DIR}/include")
 target_include_directories(test_native PRIVATE "${CMAKE_SOURCE_DIR}/../../../libstrata/include")

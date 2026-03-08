@@ -1,0 +1,8 @@
+Package: folisdk-x86_64
+Version: @VERSION@
+Architecture: @ARCH@
+Essential: no
+Priority: optional
+Depends: folisdk-host
+Maintainer: kms1212 <kms1212g@gmail.com>
+Description: foliSDK for x86_64
