@@ -101,7 +101,7 @@ jobs:
     - name: Run Build Script
       run: |
         chmod +x build.sh
-        ./build.sh --arch x86_64,i686
+        ./build.sh --arch x86_64
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
@@ -110,5 +110,4 @@ jobs:
         path: |
           build/folisdk-host.tar.gz
           build/folisdk-x86_64.tar.gz
-          build/folisdk-i686.tar.gz
         retention-days: 5
