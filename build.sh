@@ -686,6 +686,7 @@ if [ ! -f "$BUILDDIR/.patch-ncurses.stamp" ]; then
     start_section "Patch ncurses"
     "$LIBTOOLIZE" --force --copy
     
+    patch -p1 < "$ROOT/patches/ncurses-$NCURSES_VERSION.patch"
     cp "$ROOT/gnu-config-strata/config.sub" "$BUILDDIR/ncurses-src"
     cp "$ROOT/gnu-config-strata/config.guess" "$BUILDDIR/ncurses-src"
     end_section
@@ -2076,15 +2077,16 @@ for ARCH in "${ARCHS[@]}"; do
 
         start_section "Configure ncurses"
         # TODO: install database
+        BUILD_EXEEXT="" \
         ../ncurses-src/configure \
             --build="$BUILD_TRIPLET" \
             --with-sysroot="$PKGBUILDDIR/$SYSROOT" \
             --host="$TARGET_TRIPLET" \
             --prefix="/usr" \
             --with-libtool \
-            --with-build-cc=gcc \
             --with-pkg-config-libdir="/usr/lib/pkgconfig" \
             --with-tic-path="$TIC" \
+            --with-build-cc="/usr/bin/cc" \
             --without-ada \
             --disable-mixed-case \
             --disable-db-install \
@@ -2092,7 +2094,12 @@ for ARCH in "${ARCHS[@]}"; do
             --enable-static \
             --enable-widec \
             --enable-pc-files \
-            --enable-overwrite
+            --enable-overwrite \
+            ac_build_exeext="" \
+            ac_exeext="" \
+            ac_cv_exeext="" \
+            ac_cv_build_exeext="" \
+            cf_cv_build_cc_works=yes
         end_section
 
         touch "$BUILDDIR/.configure-ncurses-$ARCH.stamp"

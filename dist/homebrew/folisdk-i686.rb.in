@@ -39,10 +39,7 @@ class FolisdkI686 < Formula
       The sysroot is located at:
         #{opt_prefix}/i686-strata-folios/sysroot
 
-      To use the environment manager, add the following line to your ~/.zshrc or ~/.bash_profile:
-        source #{opt_share}/folisdk/folisdk-env.sh
-
-      After reloading your shell, you can activate the SDK using:
+      You can activate the SDK using the environment manager:
         folisdk_activate i686
 
       When building user applications, use the cross-compiler directly:

@@ -1,0 +1,36 @@
+diff --color -ruN ncurses-src.orig/configure ncurses-src/configure
+--- ncurses-src.orig/configure	2026-04-17 17:50:28
++++ ncurses-src/configure	2026-04-17 17:51:47
+@@ -5664,7 +5664,7 @@
+ 	cross_compiling=no
+ 	cf_build_cppflags=$BUILD_CPPFLAGS
+ 	test "$cf_build_cppflags" = "#" && cf_build_cppflags=
+-	ac_link='$BUILD_CC -o "conftest$ac_exeext" $BUILD_CFLAGS $cf_build_cppflags $BUILD_LDFLAGS "conftest.$ac_ext" $BUILD_LIBS >&5'
++	ac_link='$BUILD_CC -o "conftest$BUILD_EXEEXT" $BUILD_CFLAGS $cf_build_cppflags $BUILD_LDFLAGS "conftest.$ac_ext" $BUILD_LIBS >&5'
+ 
+ 	if test "$cross_compiling" = yes; then
+   cf_ok_build_cc=unknown
+@@ -5679,12 +5679,12 @@
+ 		}
+ 
+ _ACEOF
+-rm -f "conftest$ac_exeext"
++rm -f "conftest$BUILD_EXEEXT"
+ if { (eval echo "$as_me:5683: \"$ac_link\"") >&5
+   (eval $ac_link) 2>&5
+   ac_status=$?
+   echo "$as_me:5686: \$? = $ac_status" >&5
+-  (exit "$ac_status"); } && { ac_try='"./conftest$ac_exeext"'
++  (exit "$ac_status"); } && { ac_try='"./conftest$BUILD_EXEEXT"'
+   { (eval echo "$as_me:5688: \"$ac_try\"") >&5
+   (eval $ac_try) 2>&5
+   ac_status=$?
+@@ -5697,7 +5697,7 @@
+ cat "conftest.$ac_ext" >&5
+ cf_ok_build_cc=no
+ fi
+-rm -f core ./core.* ./*.core "conftest$ac_exeext" "conftest.$ac_objext" "conftest.$ac_ext"
++rm -f core ./core.* ./*.core "conftest$BUILD_EXEEXT" "conftest.$ac_objext" "conftest.$ac_ext"
+ fi
+ 
+ 	cross_compiling=$cf_save_crossed
