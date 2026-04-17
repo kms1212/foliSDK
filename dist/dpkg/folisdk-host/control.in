@@ -1,4 +1,4 @@
-Package: folisdk-host
+Package: @PACKAGE@
 Version: @VERSION@
 Architecture: @ARCH@
 Essential: no

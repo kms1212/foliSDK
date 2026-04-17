@@ -184,6 +184,10 @@ resolve_debian_arch() {
     esac
 }
 
+normalize_debian_package_name() {
+    printf '%s' "$1" | tr '_' '-'
+}
+
 
 # Global Packaging Settings
 PKGBUILDDIR="$BUILDDIR/pkgroot"
@@ -263,6 +267,7 @@ for PACKAGE_PATH in "${PACKAGE_PATHS[@]}"; do
 
     DPKG_TEMPLATE_PATH="$DPKG_DISTDIR/$PACKAGE_NAME/control.in"
     DPKG_OUTPUT_PATH="$DPKG_DISTDIR/$PACKAGE_NAME/control"
+    DEBIAN_PACKAGE_NAME=
 
     start_section "Create archive $PACKAGE_NAME"
     tar -czf "$ARCHIVE_PATH" -C "$PACKAGE_PATH" .
@@ -288,17 +293,21 @@ for PACKAGE_PATH in "${PACKAGE_PATHS[@]}"; do
     fi
 
     if [ -n "$GENERATE_DEB" ] && [ -f "$DPKG_TEMPLATE_PATH" ]; then
+        DEBIAN_PACKAGE_NAME=$(normalize_debian_package_name "$PACKAGE_NAME")
+
         start_section "Render Debian control $PACKAGE_NAME"
         render_template \
             "$DPKG_TEMPLATE_PATH" \
             "$DPKG_OUTPUT_PATH" \
+            "PACKAGE=$DEBIAN_PACKAGE_NAME" \
+            "HOST_PACKAGE=$(normalize_debian_package_name "folisdk-host")" \
             "VERSION=$VERSION" \
             "ARCH=$DEBIAN_ARCH"
         end_section
 
         DPKG_WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/$PACKAGE_NAME.XXXXXX")
         DPKG_STAGING_DIR="$DPKG_WORKDIR/$PACKAGE_NAME"
-        DEB_OUTPUT_PATH="$BUILDDIR/${PACKAGE_NAME}_${VERSION}_${DEBIAN_ARCH}.deb"
+        DEB_OUTPUT_PATH="$BUILDDIR/${DEBIAN_PACKAGE_NAME}_${VERSION}_${DEBIAN_ARCH}.deb"
 
         mkdir -p "$DPKG_STAGING_DIR/DEBIAN"
         mkdir -p "$DPKG_STAGING_DIR$DESTINATION"
