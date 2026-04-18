@@ -1,4 +1,7 @@
 build*
+!build.sh
+!build_steps.py
+!build.py
 .ruby-lsp
 .vscode
 test.c
