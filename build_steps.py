@@ -999,7 +999,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         package_step(
             name="libiconv",
             display_name="host libiconv",
-            dependencies=(),
+            dependencies=("pkgconfig",),
             configure_stamp="configure-libiconv",
             build_stamp="build-libiconv",
             cwd=lambda run_ctx: run_ctx.build_subdir("libiconv"),
@@ -1397,7 +1397,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             ("nettle", ("gmp",)),
             ("libsodium", ()),
             ("libffi", ()),
-            ("libxml2", ()),
+            ("libxml2", ("libiconv",)),
             ("libexpat", ()),
             ("xz", ()),
             ("editline", ()),
