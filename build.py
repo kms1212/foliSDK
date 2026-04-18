@@ -948,9 +948,8 @@ class BuildContext:
                 self.dry_run_log("skip submodule sync (no .gitmodules)")
             return
 
-        self.run(["git", "submodule", "sync", "--recursive"], cwd=self.root)
         self.run(
-            ["git", "submodule", "update", "--init", "--recursive", "--jobs", str(max(1, self.parallel))],
+            ["git", "submodule", "update", "--init", "--jobs", str(max(1, self.parallel))],
             cwd=self.root,
         )
 

@@ -603,7 +603,11 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
                 """,
                 build_script="""
                 make -j"$PARALLEL"
-                make install
+                # The build directory itself is the configured prefix, so the
+                # generated bin scripts are already in place. GNU install
+                # errors out on self-copies here, while install-data still
+                # populates the shared data files we actually need.
+                make install-data
                 """,
             ),
             package_step(
@@ -618,7 +622,10 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
                 """,
                 build_script="""
                 make -j"$PARALLEL"
-                make install
+                # Same-prefix builds already have the generated executables in
+                # bin/, so only install the data payload to avoid self-copy
+                # failures from GNU install on Linux.
+                make install-data
                 """,
             ),
             ScriptStep(
