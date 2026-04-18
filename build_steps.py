@@ -297,20 +297,21 @@ class StampedStep(BuildStep, ABC):
         name: str,
         title: str,
         dependencies: Iterable[str] = (),
-        stamp: str | None = None,
         slot_mode: str = "single",
         restartable: bool = False,
     ) -> None:
         super().__init__(name, dependencies, slot_mode=slot_mode, restartable=restartable)
         self.title = title
-        self.stamp = stamp or name
 
     def run(self, ctx: "BuildContext", allocated_slots: int = 1) -> None:
-        stamp_path = ctx.stamp_path(self.stamp)
-        if stamp_path.exists():
+        stamp_path = ctx.stamp_path(self.name)
+        force_rerun = ctx.should_rerun_current_step()
+        if stamp_path.exists() and not force_rerun:
             if ctx.dry_run:
-                ctx.dry_run_log(f"skip {self.stamp} (stamp exists)")
+                ctx.dry_run_log(f"skip {self.name} (stamp exists)")
             return
+        if force_rerun and stamp_path.exists():
+            ctx.dry_run_log(f"rerun {self.name} (ignoring existing stamp)")
 
         ctx.start_section(self.title)
         try:
@@ -346,7 +347,6 @@ class ActionStep(StampedStep):
         title: str,
         action: StepAction,
         dependencies: Iterable[str] = (),
-        stamp: str | None = None,
         slot_mode: str = "single",
         restartable: bool = False,
     ) -> None:
@@ -354,7 +354,6 @@ class ActionStep(StampedStep):
             name=name,
             title=title,
             dependencies=dependencies,
-            stamp=stamp,
             slot_mode=slot_mode,
             restartable=restartable,
         )
@@ -373,7 +372,6 @@ class ScriptStep(StampedStep):
         cwd: PathProvider,
         env: EnvProvider = None,
         dependencies: Iterable[str] = (),
-        stamp: str | None = None,
         slot_mode: str = "single",
         restartable: bool = False,
     ) -> None:
@@ -381,7 +379,6 @@ class ScriptStep(StampedStep):
             name=name,
             title=title,
             dependencies=dependencies,
-            stamp=stamp,
             slot_mode=slot_mode,
             restartable=restartable,
         )
@@ -413,14 +410,27 @@ class RuntimeStep(BuildStep):
         self,
         name: str,
         action: StepAction,
+        title: str | None = None,
         dependencies: Iterable[str] = (),
         slot_mode: str = "single",
         restartable: bool = False,
     ) -> None:
         super().__init__(name, dependencies, slot_mode=slot_mode, restartable=restartable)
         self.action = action
+        self.title = title
+
+    def status_title(self) -> str:
+        return self.title or self.name
 
     def run(self, ctx: "BuildContext", allocated_slots: int = 1) -> None:
+        if self.title is not None:
+            ctx.start_section(self.title)
+            try:
+                self.action(ctx)
+            finally:
+                ctx.end_section()
+            return
+
         self.action(ctx)
 
 
@@ -438,24 +448,31 @@ def _context_env(ctx: "BuildContext") -> EnvMap:
     return ctx.env
 
 
+def configure_step_name(name: str) -> str:
+    return f"configure-{name}"
+
+
+def build_step_name(name: str) -> str:
+    return f"build-{name}"
+
+
 def package_step(
     *,
     name: str,
     display_name: str,
     dependencies: Iterable[str],
-    configure_stamp: str,
-    build_stamp: str,
     configure_script: str,
     build_script: str,
     cwd: PathProvider,
     env: EnvProvider = None,
 ) -> CompositeStep:
+    configure_name = configure_step_name(name)
+    build_name = build_step_name(name)
     return CompositeStep(
-        name=name,
+        name=build_name,
         steps=[
             ScriptStep(
-                name=f"{name}:configure",
-                stamp=configure_stamp,
+                name=configure_name,
                 title=f"Configure {display_name}",
                 script=configure_script,
                 cwd=cwd,
@@ -463,13 +480,12 @@ def package_step(
                 dependencies=dependencies,
             ),
             ScriptStep(
-                name=name,
-                stamp=build_stamp,
+                name=build_name,
                 title=f"Build {display_name}",
                 script=build_script,
                 cwd=cwd,
                 env=env,
-                dependencies=(f"{name}:configure",),
+                dependencies=(configure_name,),
                 slot_mode="build",
                 restartable=True,
             ),
@@ -536,25 +552,82 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         shutil.copy2(run_ctx.root / "gnu-config-strata/config.guess", source_dir / "autosetup-config.guess")
 
     steps: list[BuildStep] = [
-        ActionStep(
-            name="download-sources",
-            title="Download sources",
-            action=lambda run_ctx: run_ctx.download_sources(),
+        RuntimeStep(
+            name="sync-submodules",
+            title="Sync submodules",
+            action=lambda run_ctx: run_ctx.sync_submodules(),
         ),
-        ActionStep(
-            name="extract-sources",
-            title="Extract sources",
-            action=lambda run_ctx: run_ctx.extract_sources(),
-            dependencies=("download-sources",),
+        RuntimeStep(
+            name="download-gnulib",
+            title="Download gnulib",
+            action=lambda run_ctx: run_ctx.ensure_gnulib_checkout(),
         ),
-        ScriptStep(
-            name="preconfigure-libtool",
-            title="Preconfigure libtool",
-            stamp="preconfigure-libtool",
-            dependencies=("extract-sources",),
-            cwd=lambda run_ctx: run_ctx.root / "libtool-strata",
-            env=_context_env,
-            script="""
+    ]
+
+    extract_dependencies: list[str] = []
+    for archive in ctx.source_archives():
+        source_name = archive.destination_dir.removesuffix("-src")
+        step_name = f"download-{source_name}"
+        steps.append(
+            RuntimeStep(
+                name=step_name,
+                title=f"Download {source_name} source",
+                action=lambda run_ctx, archive=archive: run_ctx.download_source_archive(archive),
+            )
+        )
+        extract_dependencies.append(step_name)
+
+    legacy_autotools_dependencies = (
+        "set-host-libtool-tools",
+        build_step_name("autoconf269"),
+        build_step_name("automake115"),
+    )
+
+    steps.extend(
+        [
+            ActionStep(
+                name="extract-sources",
+                title="Extract sources",
+                action=lambda run_ctx: run_ctx.extract_sources(),
+                dependencies=tuple(extract_dependencies),
+            ),
+            package_step(
+                name="autoconf269",
+                display_name="autoconf 2.69",
+                dependencies=("extract-sources",),
+                cwd=lambda run_ctx: run_ctx.build_subdir("autoconf-269"),
+                env=_context_env,
+                configure_script="""
+                ../autoconf269-src/configure \
+                    --prefix="$BUILDDIR/autoconf-269"
+                """,
+                build_script="""
+                make -j"$PARALLEL"
+                make install
+                """,
+            ),
+            package_step(
+                name="automake115",
+                display_name="automake 1.15",
+                dependencies=("extract-sources",),
+                cwd=lambda run_ctx: run_ctx.build_subdir("automake-115"),
+                env=_context_env,
+                configure_script="""
+                ../automake115-src/configure \
+                    --prefix="$BUILDDIR/automake-115"
+                """,
+                build_script="""
+                make -j"$PARALLEL"
+                make install
+                """,
+            ),
+            ScriptStep(
+                name="preconfigure-libtool",
+                title="Preconfigure libtool",
+                dependencies=("sync-submodules", "download-gnulib", "extract-sources"),
+                cwd=lambda run_ctx: run_ctx.root / "libtool-strata",
+                env=_context_env,
+                script="""
             git clean -fdX
             echo "2.5.4" > .tarball-version
             echo "2.5.4" > .version
@@ -566,30 +639,28 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
             ./bootstrap --gnulib-srcdir="$BUILDDIR/gnulib" --skip-git --verbose
             export PATH="$OLD_PATH"
             """,
-        ),
-        ScriptStep(
-            name="configure-libtool",
-            title="Configure libtool",
-            stamp="configure-libtool",
-            dependencies=("preconfigure-libtool",),
-            cwd=lambda run_ctx: run_ctx.build_subdir("libtool"),
-            env=_context_env,
-            script="""
+            ),
+            ScriptStep(
+                name="configure-libtool",
+                title="Configure libtool",
+                dependencies=("preconfigure-libtool",),
+                cwd=lambda run_ctx: run_ctx.build_subdir("libtool"),
+                env=_context_env,
+                script="""
             ../../libtool-strata/configure \
                 --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
                 --enable-ltdl-install
             """,
-        ),
-        ScriptStep(
-            name="build-libtool",
-            title="Build libtool",
-            stamp="build-libtool",
-            dependencies=("configure-libtool",),
-            cwd=lambda run_ctx: run_ctx.build_subdir("libtool"),
-            env=_context_env,
-            slot_mode="build",
-            restartable=True,
-            script="""
+            ),
+            ScriptStep(
+                name="build-libtool",
+                title="Build libtool",
+                dependencies=("configure-libtool",),
+                cwd=lambda run_ctx: run_ctx.build_subdir("libtool"),
+                env=_context_env,
+                slot_mode="build",
+                restartable=True,
+                script="""
             OLD_PATH="$PATH"
             if [ "$OSNAME" = "Darwin" ]; then
                 export PATH="$PATH:/opt/homebrew/bin"
@@ -598,32 +669,31 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
             export PATH="$OLD_PATH"
             make install
             """,
-        ),
-        RuntimeStep(
-            name="set-host-libtool-tools",
-            dependencies=("build-libtool",),
-            action=lambda run_ctx: run_ctx.set_host_libtool_env(),
-        ),
-        ActionStep(
-            name="patch-gnulib",
-            title="Patch gnulib",
-            action=patch_gnulib,
-            dependencies=("set-host-libtool-tools",),
-        ),
-        ActionStep(
-            name="patch-gmp",
-            title="Patch gmp",
-            action=patch_gmp,
-            dependencies=("set-host-libtool-tools",),
-        ),
-        ScriptStep(
-            name="patch-mpfr",
-            title="Patch mpfr",
-            stamp="patch-mpfr",
-            dependencies=("set-host-libtool-tools",),
-            cwd=lambda run_ctx: run_ctx.builddir / "mpfr-src",
-            env=_context_env,
-            script="""
+            ),
+            RuntimeStep(
+                name="set-host-libtool-tools",
+                dependencies=("build-libtool",),
+                action=lambda run_ctx: run_ctx.set_host_libtool_env(),
+            ),
+            ActionStep(
+                name="patch-gnulib",
+                title="Patch gnulib",
+                action=patch_gnulib,
+                dependencies=("set-host-libtool-tools",),
+            ),
+            ActionStep(
+                name="patch-gmp",
+                title="Patch gmp",
+                action=patch_gmp,
+                dependencies=legacy_autotools_dependencies,
+            ),
+            ScriptStep(
+                name="patch-mpfr",
+                title="Patch mpfr",
+                dependencies=("set-host-libtool-tools",),
+                cwd=lambda run_ctx: run_ctx.builddir / "mpfr-src",
+                env=_context_env,
+                script="""
             "$LIBTOOLIZE" --force --copy
             ACLOCAL="$ACLOCAL_HOST -I $PKGBUILDDIR/$HOST_PREFIX/share/aclocal" \
             AUTOMAKE="$AUTOMAKE_HOST" \
@@ -632,12 +702,11 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
             cp "$ROOT/gnu-config-strata/config.sub" ./config.sub
             cp "$ROOT/gnu-config-strata/config.guess" ./config.guess
             """,
-        ),
+            ),
         ScriptStep(
             name="patch-mpc",
             title="Patch mpc",
-            stamp="patch-mpc",
-            dependencies=("set-host-libtool-tools",),
+            dependencies=legacy_autotools_dependencies,
             cwd=lambda run_ctx: run_ctx.builddir / "mpc-src",
             env=_context_env,
             script="""
@@ -654,12 +723,11 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
             name="patch-nettle",
             title="Patch nettle",
             action=patch_nettle,
-            dependencies=("set-host-libtool-tools",),
+            dependencies=legacy_autotools_dependencies,
         ),
         ScriptStep(
             name="patch-libsodium",
             title="Patch libsodium",
-            stamp="patch-libsodium",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libsodium-src",
             env=_context_env,
@@ -676,7 +744,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libffi",
             title="Patch libffi",
-            stamp="patch-libffi",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libffi-src",
             env=_context_env,
@@ -693,7 +760,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libuv",
             title="Patch libuv",
-            stamp="patch-libuv",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libuv-src",
             env=_context_env,
@@ -711,7 +777,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libxml2",
             title="Patch libxml2",
-            stamp="patch-libxml2",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libxml2-src",
             env=_context_env,
@@ -735,7 +800,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libxslt",
             title="Patch libxslt",
-            stamp="patch-libxslt",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libxslt-src",
             env=_context_env,
@@ -752,7 +816,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libexpat",
             title="Patch libexpat",
-            stamp="patch-libexpat",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libexpat-src",
             env=_context_env,
@@ -781,7 +844,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-xz",
             title="Patch xz",
-            stamp="patch-xz",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "xz-src",
             env=_context_env,
@@ -815,7 +877,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-libarchive",
             title="Patch libarchive",
-            stamp="patch-libarchive",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "libarchive-src",
             env=_context_env,
@@ -847,7 +908,6 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-ncurses",
             title="Patch ncurses",
-            stamp="patch-ncurses",
             dependencies=("set-host-libtool-tools",),
             cwd=lambda run_ctx: run_ctx.builddir / "ncurses-src",
             env=_context_env,
@@ -861,8 +921,7 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="patch-editline",
             title="Patch editline",
-            stamp="patch-editline",
-            dependencies=("set-host-libtool-tools",),
+            dependencies=legacy_autotools_dependencies,
             cwd=lambda run_ctx: run_ctx.builddir / "editline-src",
             env=_context_env,
             script="""
@@ -888,6 +947,7 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
             dependencies=("set-host-libtool-tools",),
         ),
     ]
+    )
 
     return StepGraph("global-prepare", steps)
 
@@ -898,8 +958,6 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
             name="pkgconfig",
             display_name="pkgconfig",
             dependencies=(),
-            configure_stamp="configure-pkgconfig",
-            build_stamp="build-pkgconfig",
             cwd=lambda run_ctx: run_ctx.build_subdir("pkgconfig"),
             env=_context_env,
             configure_script="""
@@ -919,8 +977,6 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
             name="zlib",
             display_name="host zlib",
             dependencies=(),
-            configure_stamp="configure-zlib",
-            build_stamp="build-zlib",
             cwd=lambda run_ctx: run_ctx.build_subdir("zlib"),
             env=_context_env,
             configure_script="""
@@ -935,8 +991,6 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
             name="ncurses",
             display_name="host ncurses",
             dependencies=(),
-            configure_stamp="configure-ncurses",
-            build_stamp="build-ncurses",
             cwd=lambda run_ctx: run_ctx.build_subdir("ncurses"),
             env=_context_env,
             configure_script="""
@@ -961,9 +1015,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         package_step(
             name="cmake",
             display_name="cmake",
-            dependencies=("zlib", "ncurses"),
-            configure_stamp="configure-cmake",
-            build_stamp="build-cmake",
+            dependencies=(build_step_name("zlib"), build_step_name("ncurses")),
             cwd=lambda run_ctx: run_ctx.build_subdir("cmake"),
             env=_context_env,
             configure_script="""
@@ -976,15 +1028,13 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         ),
         RuntimeStep(
             name="set-host-cmake-tools",
-            dependencies=("cmake",),
+            dependencies=(build_step_name("cmake"),),
             action=lambda run_ctx: run_ctx.set_host_cmake_tools(),
         ),
         package_step(
             name="sidlc",
             display_name="sidlc",
             dependencies=("set-host-cmake-tools",),
-            configure_stamp="configure-sidlc",
-            build_stamp="build-sidlc",
             cwd=lambda run_ctx: run_ctx.build_subdir("sidlc"),
             env=_context_env,
             configure_script="""
@@ -999,9 +1049,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         package_step(
             name="libiconv",
             display_name="host libiconv",
-            dependencies=("pkgconfig",),
-            configure_stamp="configure-libiconv",
-            build_stamp="build-libiconv",
+            dependencies=(build_step_name("pkgconfig"),),
             cwd=lambda run_ctx: run_ctx.build_subdir("libiconv"),
             env=_context_env,
             configure_script="""
@@ -1018,9 +1066,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         package_step(
             name="gettext",
             display_name="host gettext",
-            dependencies=("libiconv",),
-            configure_stamp="configure-gettext",
-            build_stamp="build-gettext",
+            dependencies=(build_step_name("libiconv"),),
             cwd=lambda run_ctx: run_ctx.build_subdir("gettext"),
             env=_context_env,
             configure_script="""
@@ -1048,9 +1094,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
             package_step(
                 name=name,
                 display_name=f"host {name}",
-                dependencies=dependencies,
-                configure_stamp=f"configure-{name}",
-                build_stamp=f"build-{name}",
+                dependencies=tuple(build_step_name(dependency) for dependency in dependencies),
                 cwd=lambda run_ctx, name=name: run_ctx.build_subdir(name),
                 env=_context_env,
                 configure_script=f"""
@@ -1069,7 +1113,19 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
     steps.append(
         RuntimeStep(
             name="capture-host-state",
-            dependencies=("pkgconfig", "zlib", "ncurses", "cmake", "sidlc", "libiconv", "gettext", "gmp", "mpfr", "mpc", "isl"),
+            dependencies=(
+                build_step_name("pkgconfig"),
+                build_step_name("zlib"),
+                build_step_name("ncurses"),
+                build_step_name("cmake"),
+                build_step_name("sidlc"),
+                build_step_name("libiconv"),
+                build_step_name("gettext"),
+                build_step_name("gmp"),
+                build_step_name("mpfr"),
+                build_step_name("mpc"),
+                build_step_name("isl"),
+            ),
             action=lambda run_ctx: run_ctx.capture_host_state(),
         )
     )
@@ -1092,13 +1148,17 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             "LDFLAGS": f"{run_ctx.root_ldflags} -s",
         }
 
+    def arch_name(name: str) -> str:
+        return f"{name}-{arch_suffix}"
+
+    def arch_build(name: str) -> str:
+        return build_step_name(arch_name(name))
+
     steps: list[BuildStep] = [
         package_step(
-            name="binutils",
+            name=arch_name("binutils"),
             display_name=f"binutils ({arch})",
             dependencies=(),
-            configure_stamp=f"configure-binutils-{arch_suffix}",
-            build_stamp=f"build-binutils-{arch_suffix}",
             cwd=lambda run_ctx: run_ctx.build_subdir(f"binutils-{arch}"),
             env=root_flags_env,
             configure_script="""
@@ -1139,11 +1199,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         package_step(
-            name="gcc-pass1",
+            name=arch_name("gcc-pass1"),
             display_name=f"GCC pass1 ({arch})",
-            dependencies=("binutils",),
-            configure_stamp=f"configure-gcc-pass1-{arch_suffix}",
-            build_stamp=f"build-gcc-pass1-{arch_suffix}",
+            dependencies=(arch_build("binutils"),),
             cwd=lambda run_ctx: run_ctx.build_subdir(f"gcc-pass1-{arch}"),
             env=root_flags_env,
             configure_script="""
@@ -1178,18 +1236,15 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         ActionStep(
-            name="install-gcc-stdint",
+            name=f"install-gcc-stdint-{arch_suffix}",
             title=f"Install GCC stdint header ({arch})",
-            stamp=f"install-gcc-stdint-{arch_suffix}",
-            dependencies=("gcc-pass1",),
+            dependencies=(arch_build("gcc-pass1"),),
             action=lambda run_ctx: run_ctx.copy_gcc_stdint(state),
         ),
         package_step(
-            name="libstrata",
+            name=arch_name("libstrata"),
             display_name=f"libstrata ({arch})",
-            dependencies=("install-gcc-stdint",),
-            configure_stamp=f"configure-libstrata-{arch_suffix}",
-            build_stamp=f"build-libstrata-{arch_suffix}",
+            dependencies=(f"install-gcc-stdint-{arch_suffix}",),
             cwd=lambda run_ctx: run_ctx.build_subdir(f"libstrata-{arch}"),
             env=arch_env,
             configure_script="""
@@ -1208,11 +1263,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         package_step(
-            name="musl-pass1",
+            name=arch_name("musl-pass1"),
             display_name=f"musl pass1 ({arch})",
-            dependencies=("libstrata",),
-            configure_stamp=f"configure-musl-pass1-{arch_suffix}",
-            build_stamp=f"build-musl-pass1-{arch_suffix}",
+            dependencies=(arch_build("libstrata"),),
             cwd=lambda run_ctx: run_ctx.build_subdir(f"musl-pass1-{arch}"),
             env=arch_env,
             configure_script="""
@@ -1233,11 +1286,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         package_step(
-            name="libtool-pass1",
+            name=arch_name("libtool-pass1"),
             display_name=f"libtool pass1 ({arch})",
-            dependencies=("musl-pass1",),
-            configure_stamp=f"configure-libtool-pass1-{arch_suffix}",
-            build_stamp=f"build-libtool-pass1-{arch_suffix}",
+            dependencies=(arch_build("musl-pass1"),),
             cwd=lambda run_ctx: run_ctx.build_subdir(f"libtool-pass1-{arch}"),
             env=arch_env,
             configure_script="""
@@ -1277,15 +1328,13 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
         ),
         RuntimeStep(
             name="set-arch-libtool-tools",
-            dependencies=("libtool-pass1",),
+            dependencies=(arch_build("libtool-pass1"),),
             action=lambda run_ctx: run_ctx.set_arch_libtool_env(state),
         ),
         package_step(
-            name="gcc-pass2",
+            name=arch_name("gcc-pass2"),
             display_name=f"GCC pass2 ({arch})",
             dependencies=("set-arch-libtool-tools",),
-            configure_stamp=f"configure-gcc-pass2-{arch_suffix}",
-            build_stamp=f"build-gcc-pass2-{arch_suffix}",
             cwd=lambda run_ctx: run_ctx.build_subdir(f"gcc-pass2-{arch}"),
             env=arch_env,
             configure_script="""
@@ -1337,10 +1386,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         ScriptStep(
-            name="cleanup-pass1",
+            name=f"cleanup-pass1-{arch_suffix}",
             title=f"Cleanup pass1 ({arch})",
-            stamp=f"cleanup-pass1-{arch_suffix}",
-            dependencies=("gcc-pass2",),
+            dependencies=(arch_build("gcc-pass2"),),
             cwd=lambda run_ctx: run_ctx.pkgbuilddir,
             env=arch_env,
             script="""
@@ -1350,11 +1398,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
             """,
         ),
         package_step(
-            name="musl-pass2",
+            name=arch_name("musl-pass2"),
             display_name=f"musl pass2 ({arch})",
-            dependencies=("cleanup-pass1",),
-            configure_stamp=f"configure-musl-pass2-{arch_suffix}",
-            build_stamp=f"build-musl-pass2-{arch_suffix}",
+            dependencies=(f"cleanup-pass1-{arch_suffix}",),
             cwd=lambda run_ctx: run_ctx.build_subdir(f"musl-pass2-{arch}"),
             env=arch_env,
             configure_script="""
@@ -1376,7 +1422,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
         ),
         RuntimeStep(
             name="set-arch-toolchain",
-            dependencies=("musl-pass2",),
+            dependencies=(arch_build("musl-pass2"),),
             action=lambda run_ctx: run_ctx.set_arch_compiler_env(state),
         ),
     ]
@@ -1384,7 +1430,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
     target_step_names: list[str] = []
 
     def target_deps(*names: str) -> tuple[str, ...]:
-        return ("set-arch-toolchain", *names)
+        return ("set-arch-toolchain", *(arch_build(name) for name in names))
 
     if include_target_libs:
         # Keep target library edges aligned with the actual configure/build flags:
@@ -1431,11 +1477,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
 
             steps.append(
                 package_step(
-                    name=name,
+                    name=arch_name(name),
                     display_name=f"{name} ({arch})",
                     dependencies=target_deps(*dependencies),
-                    configure_stamp=f"configure-{name}-{arch_suffix}",
-                    build_stamp=f"build-{name}-{arch_suffix}",
                     cwd=lambda run_ctx, name=name: run_ctx.build_subdir(f"{name}-{arch}"),
                     env=arch_env,
                     configure_script=f"""
@@ -1448,15 +1492,13 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                     build_script=build_script,
                 )
             )
-            target_step_names.append(name)
+            target_step_names.append(arch_build(name))
 
         explicit_targets = [
             package_step(
-                name="libuv",
+                name=arch_name("libuv"),
                 display_name=f"libuv ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-libuv-{arch_suffix}",
-                build_stamp=f"build-libuv-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libuv-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1475,11 +1517,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="libxslt",
+                name=arch_name("libxslt"),
                 display_name=f"libxslt ({arch})",
                 dependencies=target_deps("libxml2"),
-                configure_stamp=f"configure-libxslt-{arch_suffix}",
-                build_stamp=f"build-libxslt-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libxslt-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1500,11 +1540,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="yyjson",
+                name=arch_name("yyjson"),
                 display_name=f"yyjson ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-yyjson-{arch_suffix}",
-                build_stamp=f"build-yyjson-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"yyjson-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1523,11 +1561,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="zlib",
+                name=arch_name("zlib"),
                 display_name=f"target zlib ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-zlib-{arch_suffix}",
-                build_stamp=f"build-zlib-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"zlib-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1543,11 +1579,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="bzip2",
+                name=arch_name("bzip2"),
                 display_name=f"bzip2 ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-bzip2-{arch_suffix}",
-                build_stamp=f"build-bzip2-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"bzip2-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1569,11 +1603,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="lz4",
+                name=arch_name("lz4"),
                 display_name=f"lz4 ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-lz4-{arch_suffix}",
-                build_stamp=f"build-lz4-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"lz4-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1595,11 +1627,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="zstd",
+                name=arch_name("zstd"),
                 display_name=f"zstd ({arch})",
                 dependencies=target_deps("zlib", "xz", "lz4"),
-                configure_stamp=f"configure-zstd-{arch_suffix}",
-                build_stamp=f"build-zstd-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"zstd-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1630,11 +1660,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="libarchive",
+                name=arch_name("libarchive"),
                 display_name=f"libarchive ({arch})",
                 dependencies=target_deps("zlib", "bzip2", "xz", "lz4", "zstd", "nettle", "libexpat"),
-                configure_stamp=f"configure-libarchive-{arch_suffix}",
-                build_stamp=f"build-libarchive-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libarchive-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1663,11 +1691,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="libiconv",
+                name=arch_name("libiconv"),
                 display_name=f"target libiconv ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-libiconv-{arch_suffix}",
-                build_stamp=f"build-libiconv-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libiconv-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1688,11 +1714,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="ncurses",
+                name=arch_name("ncurses"),
                 display_name=f"target ncurses ({arch})",
                 dependencies=target_deps(),
-                configure_stamp=f"configure-ncurses-{arch_suffix}",
-                build_stamp=f"build-ncurses-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"ncurses-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1727,11 +1751,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="sqlite3",
+                name=arch_name("sqlite3"),
                 display_name=f"sqlite3 ({arch})",
                 dependencies=target_deps("readline", "ncurses"),
-                configure_stamp=f"configure-sqlite3-{arch_suffix}",
-                build_stamp=f"build-sqlite3-{arch_suffix}",
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"sqlite3-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1761,17 +1783,17 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
         steps.extend(explicit_targets)
         target_step_names.extend(
             [
-                "libuv",
-                "libxslt",
-                "yyjson",
-                "zlib",
-                "bzip2",
-                "lz4",
-                "zstd",
-                "libarchive",
-                "libiconv",
-                "ncurses",
-                "sqlite3",
+                arch_build("libuv"),
+                arch_build("libxslt"),
+                arch_build("yyjson"),
+                arch_build("zlib"),
+                arch_build("bzip2"),
+                arch_build("lz4"),
+                arch_build("zstd"),
+                arch_build("libarchive"),
+                arch_build("libiconv"),
+                arch_build("ncurses"),
+                arch_build("sqlite3"),
             ]
         )
 
@@ -1780,9 +1802,8 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
     steps.extend(
         [
             ScriptStep(
-                name="uninstall-libtool-pass1",
+                name=f"uninstall-libtool-pass1-{arch_suffix}",
                 title=f"Uninstall libtool pass1 ({arch})",
-                stamp=f"uninstall-libtool-pass1-{arch_suffix}",
                 dependencies=uninstall_dependencies,
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libtool-pass1-{arch}"),
                 env=arch_env,
@@ -1791,11 +1812,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             package_step(
-                name="libtool-pass2",
+                name=arch_name("libtool-pass2"),
                 display_name=f"libtool pass2 ({arch})",
-                dependencies=("uninstall-libtool-pass1",),
-                configure_stamp=f"configure-libtool-pass2-{arch_suffix}",
-                build_stamp=f"build-libtool-pass2-{arch_suffix}",
+                dependencies=(f"uninstall-libtool-pass1-{arch_suffix}",),
                 cwd=lambda run_ctx: run_ctx.build_subdir(f"libtool-pass2-{arch}"),
                 env=arch_env,
                 configure_script="""
@@ -1824,10 +1843,9 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 """,
             ),
             ScriptStep(
-                name="cleanup-pass2",
+                name=f"cleanup-pass2-{arch_suffix}",
                 title=f"Cleanup pass2 ({arch})",
-                stamp=f"cleanup-pass2-{arch_suffix}",
-                dependencies=("libtool-pass2",),
+                dependencies=(arch_build("libtool-pass2"),),
                 cwd=lambda run_ctx: run_ctx.pkg_prefix_path(state.env["ARCH_PREFIX"]),
                 env=arch_env,
                 script="""
@@ -1845,7 +1863,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
         ]
     )
 
-    return StepGraph(f"{arch}-build", steps)
+    return StepGraph(f"arch-{arch}", steps)
 
 
 def create_host_cleanup_graph(ctx: "BuildContext") -> StepGraph:
@@ -1859,7 +1877,6 @@ def create_host_cleanup_graph(ctx: "BuildContext") -> StepGraph:
             ScriptStep(
                 name=step_name,
                 title=f"Uninstall host {name}",
-                stamp=step_name,
                 cwd=lambda run_ctx, name=name: run_ctx.build_subdir(name),
                 env=_context_env,
                 script="""
@@ -1872,7 +1889,6 @@ def create_host_cleanup_graph(ctx: "BuildContext") -> StepGraph:
         ScriptStep(
             name="cleanup-host",
             title="Cleanup host files",
-            stamp="cleanup-host",
             dependencies=tuple(uninstall_names),
             cwd=lambda run_ctx: run_ctx.pkg_prefix_path(run_ctx.host_prefix),
             env=_context_env,

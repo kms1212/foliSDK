@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
+import hashlib
 import os
 import re
 import shlex
@@ -27,6 +28,7 @@ from build_steps import (
     JobControl,
     StepGraph,
     StepRestart,
+    StampedStep,
     create_arch_graph,
     create_global_prepare_graph,
     create_host_cleanup_graph,
@@ -56,10 +58,18 @@ def resolve_path(root: Path, value: str) -> Path:
     return path.resolve()
 
 
+def stdout_supports_ansi(stream: object, env: dict[str, str] | None = None) -> bool:
+    term_env = os.environ if env is None else env
+    term = term_env.get("TERM", "")
+    is_tty = getattr(stream, "isatty", lambda: False)()
+    return bool(is_tty and term not in ("", "dumb"))
+
+
 @dataclass(frozen=True)
 class SourceArchive:
     output_name: str
     url_key: str
+    sha256_key: str
     extracted_dir: str | None
     destination_dir: str
 
@@ -178,10 +188,9 @@ class TerminalStatusPanel:
         self.columns = 0
 
     def _supports_terminal(self) -> bool:
-        term = os.environ.get("TERM", "")
         return (
-            self.stream.isatty()
-            and term not in ("", "dumb")
+            not self.ctx.direct_output
+            and stdout_supports_ansi(self.stream, self.ctx.env)
             and self.ctx.env.get("GITHUB_ACTIONS", "false") != "true"
         )
 
@@ -593,9 +602,14 @@ class BuildContext:
             raise SystemExit("At least one architecture must be specified.")
 
         self.builddir = resolve_path(self.root, args.build_dir or "build")
-        self.pkgbuilddir = self.builddir / "pkgroot"
+        self.builddir_layout = bool(args.builddir_layout)
+        if self.builddir_layout and args.destination:
+            raise SystemExit("--builddir-layout cannot be combined with --destination.")
+        self.pkgbuilddir = self.builddir if self.builddir_layout else self.builddir / "pkgroot"
 
-        if args.destination:
+        if self.builddir_layout:
+            self.destination = ""
+        elif args.destination:
             self.destination = args.destination
         elif self.osname == "Darwin":
             self.destination = "/opt/homebrew/opt"
@@ -606,10 +620,13 @@ class BuildContext:
         self.spare_slots = max(0, self.cpu_count - self.parallel)
         self.no_libs = args.no_libs
         self.sed_type = "bsd" if self.osname == "Darwin" else "gnu"
+        self.rerun_step_selectors = tuple(selector.strip() for selector in (args.rerun_step or []) if selector.strip())
+        self.rerun_job_keys: set[str] = set()
 
         self.env = os.environ.copy()
         self.env.update(self.base_environment())
         self.env.update(self.load_versions())
+        self.direct_output = bool(args.direct_output) or not stdout_supports_ansi(sys.stdout, os.environ)
 
         if not self.dry_run:
             self.pkgbuilddir.mkdir(parents=True, exist_ok=True)
@@ -621,6 +638,7 @@ class BuildContext:
                 "BUILDDIR": str(self.builddir),
                 "PKGBUILDDIR": str(self.pkgbuilddir),
                 "DESTINATION": self.destination,
+                "PREFIX_LAYOUT": "builddir" if self.builddir_layout else "staged",
                 "PARALLEL": str(self.parallel),
                 "HOST_PREFIX": self.host_prefix,
                 "SED_TYPE": self.sed_type,
@@ -801,23 +819,26 @@ class BuildContext:
         return f"{base.rstrip('/')}/{relative.lstrip('/')}"
 
     def base_environment(self) -> dict[str, str]:
+        automake115_bin = self.builddir / "automake-115/bin"
+        autoconf269_bin = self.builddir / "autoconf-269/bin"
+
         if self.osname == "Darwin":
             env = {
                 "TCLSH": "/opt/homebrew/opt/tcl-tk/bin/tclsh",
                 "M4": "/opt/homebrew/opt/m4/bin/m4",
-                "ACLOCAL_1_15_HOST": "/opt/automake-1.15/bin/aclocal",
-                "AUTOMAKE_1_15_HOST": "/opt/automake-1.15/bin/automake",
-                "AUTOCONF_2_69_HOST": "/opt/autoconf-2.69/bin/autoconf",
-                "AUTORECONF_2_69_HOST": "/opt/autoconf-2.69/bin/autoreconf",
+                "ACLOCAL_1_15_HOST": str(automake115_bin / "aclocal"),
+                "AUTOMAKE_1_15_HOST": str(automake115_bin / "automake"),
+                "AUTOCONF_2_69_HOST": str(autoconf269_bin / "autoconf"),
+                "AUTORECONF_2_69_HOST": str(autoconf269_bin / "autoreconf"),
             }
         else:
             env = {
                 "TCLSH": self.require_tool("tclsh"),
                 "M4": self.require_tool("m4"),
-                "ACLOCAL_1_15_HOST": "/opt/automake-1.15/bin/aclocal",
-                "AUTOMAKE_1_15_HOST": "/opt/automake-1.15/bin/automake",
-                "AUTOCONF_2_69_HOST": "/opt/autoconf-2.69/bin/autoconf",
-                "AUTORECONF_2_69_HOST": "/opt/autoconf-2.69/bin/autoreconf",
+                "ACLOCAL_1_15_HOST": str(automake115_bin / "aclocal"),
+                "AUTOMAKE_1_15_HOST": str(automake115_bin / "automake"),
+                "AUTOCONF_2_69_HOST": str(autoconf269_bin / "autoconf"),
+                "AUTORECONF_2_69_HOST": str(autoconf269_bin / "autoreconf"),
             }
 
         env.update(
@@ -852,45 +873,212 @@ class BuildContext:
                 continue
             key, _, value = entry.partition(b"=")
             key_text = key.decode()
-            if key_text == "GNU_MIRROR" or key_text.endswith("_VERSION") or key_text.endswith("_URL"):
+            if key_text == "GNU_MIRROR" or key_text.endswith(("_VERSION", "_URL", "_SHA256")):
                 loaded[key_text] = value.decode()
         return loaded
 
     def source_archives(self) -> list[SourceArchive]:
         versions = self.env
         return [
-            SourceArchive(f"pkg-config-{versions['PKGCONFIG_VERSION']}.tar.gz", "PKGCONFIG_URL", f"pkg-config-{versions['PKGCONFIG_VERSION']}", "pkgconfig-src"),
-            SourceArchive(f"gettext-{versions['GETTEXT_VERSION']}.tar.xz", "GETTEXT_URL", f"gettext-{versions['GETTEXT_VERSION']}", "gettext-src"),
-            SourceArchive(f"gmp-{versions['GMP_VERSION']}.tar.xz", "GMP_URL", f"gmp-{versions['GMP_VERSION']}", "gmp-src"),
-            SourceArchive(f"mpfr-{versions['MPFR_VERSION']}.tar.xz", "MPFR_URL", f"mpfr-{versions['MPFR_VERSION']}", "mpfr-src"),
-            SourceArchive(f"mpc-{versions['MPC_VERSION']}.tar.gz", "MPC_URL", f"mpc-{versions['MPC_VERSION']}", "mpc-src"),
-            SourceArchive(f"isl-{versions['ISL_VERSION']}.tar.gz", "ISL_URL", f"isl-{versions['ISL_VERSION']}", "isl-src"),
-            SourceArchive(f"nettle-{versions['NETTLE_VERSION']}.tar.gz", "NETTLE_URL", f"nettle-{versions['NETTLE_VERSION']}", "nettle-src"),
-            SourceArchive(f"libsodium-{versions['LIBSODIUM_VERSION']}.tar.gz", "LIBSODIUM_URL", f"libsodium-{versions['LIBSODIUM_VERSION']}", "libsodium-src"),
-            SourceArchive(f"libffi-{versions['LIBFFI_VERSION']}.tar.gz", "LIBFFI_URL", f"libffi-{versions['LIBFFI_VERSION']}", "libffi-src"),
-            SourceArchive(f"libuv-v{versions['LIBUV_VERSION']}.tar.gz", "LIBUV_URL", f"libuv-v{versions['LIBUV_VERSION']}", "libuv-src"),
-            SourceArchive(f"libxml2-{versions['LIBXML2_VERSION']}.tar.xz", "LIBXML2_URL", f"libxml2-{versions['LIBXML2_VERSION']}", "libxml2-src"),
-            SourceArchive(f"libxslt-{versions['LIBXSLT_VERSION']}.tar.xz", "LIBXSLT_URL", f"libxslt-{versions['LIBXSLT_VERSION']}", "libxslt-src"),
-            SourceArchive(f"expat-{versions['LIBEXPAT_VERSION']}.tar.xz", "LIBEXPAT_URL", f"expat-{versions['LIBEXPAT_VERSION']}", "libexpat-src"),
-            SourceArchive(f"yyjson-{versions['YYJSON_VERSION']}.tar.gz", "YYJSON_URL", f"yyjson-{versions['YYJSON_VERSION']}", "yyjson-src"),
-            SourceArchive(f"zlib-{versions['ZLIB_VERSION']}.tar.gz", "ZLIB_URL", f"zlib-{versions['ZLIB_VERSION']}", "zlib-src"),
-            SourceArchive(f"bzip2-{versions['BZIP2_VERSION']}.tar.gz", "BZIP2_URL", f"bzip2-{versions['BZIP2_VERSION']}", "bzip2-src"),
-            SourceArchive(f"xz-{versions['XZ_VERSION']}.tar.gz", "XZ_URL", f"xz-{versions['XZ_VERSION']}", "xz-src"),
-            SourceArchive(f"lz4-{versions['LZ4_VERSION']}.tar.gz", "LZ4_URL", f"lz4-{versions['LZ4_VERSION']}", "lz4-src"),
-            SourceArchive(f"zstd-{versions['ZSTD_VERSION']}.tar.gz", "ZSTD_URL", f"zstd-{versions['ZSTD_VERSION']}", "zstd-src"),
-            SourceArchive(f"libarchive-{versions['LIBARCHIVE_VERSION']}.tar.gz", "LIBARCHIVE_URL", f"libarchive-{versions['LIBARCHIVE_VERSION']}", "libarchive-src"),
-            SourceArchive(f"libiconv-{versions['LIBICONV_VERSION']}.tar.gz", "LIBICONV_URL", f"libiconv-{versions['LIBICONV_VERSION']}", "libiconv-src"),
-            SourceArchive(f"ncurses-{versions['NCURSES_VERSION']}.tar.gz", "NCURSES_URL", f"ncurses-{versions['NCURSES_VERSION']}", "ncurses-src"),
-            SourceArchive(f"editline-{versions['EDITLINE_VERSION']}.tar.gz", "EDITLINE_URL", f"editline-{versions['EDITLINE_VERSION']}", "editline-src"),
-            SourceArchive(f"readline-{versions['READLINE_VERSION']}.tar.gz", "READLINE_URL", f"readline-{versions['READLINE_VERSION']}", "readline-src"),
-            SourceArchive(f"sqlite-autoconf-{versions['SQLITE3_VERSION']}.tar.gz", "SQLITE3_URL", None, "sqlite3-src"),
+            SourceArchive(f"pkg-config-{versions['PKGCONFIG_VERSION']}.tar.gz", "PKGCONFIG_URL", "PKGCONFIG_SHA256", f"pkg-config-{versions['PKGCONFIG_VERSION']}", "pkgconfig-src"),
+            SourceArchive(f"gettext-{versions['GETTEXT_VERSION']}.tar.xz", "GETTEXT_URL", "GETTEXT_SHA256", f"gettext-{versions['GETTEXT_VERSION']}", "gettext-src"),
+            SourceArchive(f"autoconf-{versions['AUTOCONF269_VERSION']}.tar.xz", "AUTOCONF269_URL", "AUTOCONF269_SHA256", f"autoconf-{versions['AUTOCONF269_VERSION']}", "autoconf269-src"),
+            SourceArchive(f"automake-{versions['AUTOMAKE115_VERSION']}.tar.xz", "AUTOMAKE115_URL", "AUTOMAKE115_SHA256", f"automake-{versions['AUTOMAKE115_VERSION']}", "automake115-src"),
+            SourceArchive(f"gmp-{versions['GMP_VERSION']}.tar.xz", "GMP_URL", "GMP_SHA256", f"gmp-{versions['GMP_VERSION']}", "gmp-src"),
+            SourceArchive(f"mpfr-{versions['MPFR_VERSION']}.tar.xz", "MPFR_URL", "MPFR_SHA256", f"mpfr-{versions['MPFR_VERSION']}", "mpfr-src"),
+            SourceArchive(f"mpc-{versions['MPC_VERSION']}.tar.gz", "MPC_URL", "MPC_SHA256", f"mpc-{versions['MPC_VERSION']}", "mpc-src"),
+            SourceArchive(f"isl-{versions['ISL_VERSION']}.tar.gz", "ISL_URL", "ISL_SHA256", f"isl-{versions['ISL_VERSION']}", "isl-src"),
+            SourceArchive(f"nettle-{versions['NETTLE_VERSION']}.tar.gz", "NETTLE_URL", "NETTLE_SHA256", f"nettle-{versions['NETTLE_VERSION']}", "nettle-src"),
+            SourceArchive(f"libsodium-{versions['LIBSODIUM_VERSION']}.tar.gz", "LIBSODIUM_URL", "LIBSODIUM_SHA256", f"libsodium-{versions['LIBSODIUM_VERSION']}", "libsodium-src"),
+            SourceArchive(f"libffi-{versions['LIBFFI_VERSION']}.tar.gz", "LIBFFI_URL", "LIBFFI_SHA256", f"libffi-{versions['LIBFFI_VERSION']}", "libffi-src"),
+            SourceArchive(f"libuv-v{versions['LIBUV_VERSION']}.tar.gz", "LIBUV_URL", "LIBUV_SHA256", f"libuv-v{versions['LIBUV_VERSION']}", "libuv-src"),
+            SourceArchive(f"libxml2-{versions['LIBXML2_VERSION']}.tar.xz", "LIBXML2_URL", "LIBXML2_SHA256", f"libxml2-{versions['LIBXML2_VERSION']}", "libxml2-src"),
+            SourceArchive(f"libxslt-{versions['LIBXSLT_VERSION']}.tar.xz", "LIBXSLT_URL", "LIBXSLT_SHA256", f"libxslt-{versions['LIBXSLT_VERSION']}", "libxslt-src"),
+            SourceArchive(f"expat-{versions['LIBEXPAT_VERSION']}.tar.xz", "LIBEXPAT_URL", "LIBEXPAT_SHA256", f"expat-{versions['LIBEXPAT_VERSION']}", "libexpat-src"),
+            SourceArchive(f"yyjson-{versions['YYJSON_VERSION']}.tar.gz", "YYJSON_URL", "YYJSON_SHA256", f"yyjson-{versions['YYJSON_VERSION']}", "yyjson-src"),
+            SourceArchive(f"zlib-{versions['ZLIB_VERSION']}.tar.gz", "ZLIB_URL", "ZLIB_SHA256", f"zlib-{versions['ZLIB_VERSION']}", "zlib-src"),
+            SourceArchive(f"bzip2-{versions['BZIP2_VERSION']}.tar.gz", "BZIP2_URL", "BZIP2_SHA256", f"bzip2-{versions['BZIP2_VERSION']}", "bzip2-src"),
+            SourceArchive(f"xz-{versions['XZ_VERSION']}.tar.gz", "XZ_URL", "XZ_SHA256", f"xz-{versions['XZ_VERSION']}", "xz-src"),
+            SourceArchive(f"lz4-{versions['LZ4_VERSION']}.tar.gz", "LZ4_URL", "LZ4_SHA256", f"lz4-{versions['LZ4_VERSION']}", "lz4-src"),
+            SourceArchive(f"zstd-{versions['ZSTD_VERSION']}.tar.gz", "ZSTD_URL", "ZSTD_SHA256", f"zstd-{versions['ZSTD_VERSION']}", "zstd-src"),
+            SourceArchive(f"libarchive-{versions['LIBARCHIVE_VERSION']}.tar.gz", "LIBARCHIVE_URL", "LIBARCHIVE_SHA256", f"libarchive-{versions['LIBARCHIVE_VERSION']}", "libarchive-src"),
+            SourceArchive(f"libiconv-{versions['LIBICONV_VERSION']}.tar.gz", "LIBICONV_URL", "LIBICONV_SHA256", f"libiconv-{versions['LIBICONV_VERSION']}", "libiconv-src"),
+            SourceArchive(f"ncurses-{versions['NCURSES_VERSION']}.tar.gz", "NCURSES_URL", "NCURSES_SHA256", f"ncurses-{versions['NCURSES_VERSION']}", "ncurses-src"),
+            SourceArchive(f"editline-{versions['EDITLINE_VERSION']}.tar.gz", "EDITLINE_URL", "EDITLINE_SHA256", f"editline-{versions['EDITLINE_VERSION']}", "editline-src"),
+            SourceArchive(f"readline-{versions['READLINE_VERSION']}.tar.gz", "READLINE_URL", "READLINE_SHA256", f"readline-{versions['READLINE_VERSION']}", "readline-src"),
+            SourceArchive(f"sqlite-autoconf-{versions['SQLITE3_VERSION']}.tar.gz", "SQLITE3_URL", "SQLITE3_SHA256", None, "sqlite3-src"),
         ]
+
+    def source_archive_path(self, archive: SourceArchive) -> Path:
+        return self.builddir / archive.output_name
+
+    def file_sha256(self, path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def ensure_gnulib_checkout(self) -> None:
+        gnulib_dir = self.builddir / "gnulib"
+        git_dir = gnulib_dir / ".git"
+
+        if self.dry_run:
+            if git_dir.is_dir():
+                self.dry_run_log(f"reuse {gnulib_dir}")
+            else:
+                self.dry_run_log(f"would clone gnulib into {gnulib_dir}")
+            return
+
+        self.builddir.mkdir(parents=True, exist_ok=True)
+        if git_dir.is_dir():
+            return
+
+        if gnulib_dir.exists():
+            shutil.rmtree(gnulib_dir, ignore_errors=True)
+
+        self.run(["git", "clone", "https://git.savannah.gnu.org/git/gnulib.git", "--depth", "1"], cwd=self.builddir)
+
+    def sync_submodules(self) -> None:
+        if not (self.root / ".gitmodules").is_file():
+            if self.dry_run:
+                self.dry_run_log("skip submodule sync (no .gitmodules)")
+            return
+
+        self.run(["git", "submodule", "sync", "--recursive"], cwd=self.root)
+        self.run(
+            ["git", "submodule", "update", "--init", "--recursive", "--jobs", str(max(1, self.parallel))],
+            cwd=self.root,
+        )
+
+    def download_source_archive(self, archive: SourceArchive) -> None:
+        self.raise_if_cancelled()
+
+        archive_path = self.source_archive_path(archive)
+        expected_hash = self.env.get(archive.sha256_key, "").strip().lower()
+        if not expected_hash:
+            raise RuntimeError(f"Missing {archive.sha256_key} for {archive.output_name} in versions.cfg")
+
+        current_hash = self.file_sha256(archive_path) if archive_path.is_file() else None
+        if current_hash is not None and current_hash == expected_hash:
+            self.log_line(f"verified {archive.output_name} [{current_hash[:12]}]")
+            return
+
+        if current_hash is None:
+            self.log_line(f"missing {archive.output_name}; downloading")
+        else:
+            self.log_line(
+                f"hash mismatch for {archive.output_name}: expected {expected_hash[:12]}, got {current_hash[:12]}; re-downloading"
+            )
+
+        temp_name = f".{archive.output_name}.part"
+        if self.dry_run:
+            self.run(
+                [
+                    "curl",
+                    "--fail",
+                    "--retry",
+                    "5",
+                    "--retry-delay",
+                    "2",
+                    "-L",
+                    "-o",
+                    temp_name,
+                    self.env[archive.url_key],
+                ],
+                cwd=self.builddir,
+            )
+            self.dry_run_log(f"would verify sha256 for {archive.output_name} [{expected_hash[:12]}]")
+            return
+
+        self.builddir.mkdir(parents=True, exist_ok=True)
+        temp_path = self.builddir / temp_name
+        if temp_path.exists():
+            temp_path.unlink()
+
+        self.run(
+            [
+                "curl",
+                "--fail",
+                "--retry",
+                "5",
+                "--retry-delay",
+                "2",
+                "-L",
+                "-o",
+                temp_name,
+                self.env[archive.url_key],
+            ],
+            cwd=self.builddir,
+        )
+
+        downloaded_hash = self.file_sha256(temp_path)
+        if downloaded_hash != expected_hash:
+            temp_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"sha256 mismatch for {archive.output_name}: expected {expected_hash}, got {downloaded_hash}"
+            )
+        temp_path.replace(archive_path)
+        self.log_line(f"downloaded {archive.output_name} [{downloaded_hash[:12]}]")
 
     def pkg_prefix_path(self, prefix: str) -> Path:
         return self.pkgbuilddir / prefix.lstrip("/")
 
     def stamp_path(self, name: str) -> Path:
         return self.builddir / f".{name}.stamp"
+
+    def resolve_rerun_steps(self, graphs: list[StepGraph]) -> None:
+        if not self.rerun_step_selectors:
+            return
+
+        alias_map: dict[str, list[tuple[str, str]]] = {}
+        for graph in graphs:
+            for step in graph.steps.values():
+                if not isinstance(step, StampedStep):
+                    continue
+
+                target = (graph.label, step.name)
+                for alias in {
+                    step.name,
+                    f"{graph.label}:{step.name}",
+                }:
+                    alias_map.setdefault(alias, []).append(target)
+
+        resolved: set[str] = set()
+        errors: list[str] = []
+
+        for selector in self.rerun_step_selectors:
+            matches = list(dict.fromkeys(alias_map.get(selector, [])))
+            if not matches:
+                errors.append(
+                    f"Unknown --rerun-step target {selector!r}. Use a step name or graph:step."
+                )
+                continue
+
+            if len(matches) > 1:
+                rendered = ", ".join(
+                    f"{graph_label}:{step_name}"
+                    for graph_label, step_name in matches
+                )
+                errors.append(
+                    f"Ambiguous --rerun-step target {selector!r}: {rendered}. Use graph:step."
+                )
+                continue
+
+            graph_label, step_name = matches[0]
+            resolved.add(f"{graph_label}:{step_name}")
+
+        if errors:
+            raise SystemExit("\n".join(errors))
+
+        self.rerun_job_keys = resolved
+
+    def should_rerun_current_step(self) -> bool:
+        job_key = self.current_job_key()
+        return job_key is not None and job_key in self.rerun_job_keys
 
     def start_section(self, title: str) -> None:
         if self.status_panel.enabled:
@@ -960,6 +1148,9 @@ class BuildContext:
 
         merged = self.merged_env(env)
         if self.current_job_key() is not None:
+            if self.direct_output:
+                self._run_passthrough(args, cwd=cwd, env=merged, stdin_path=stdin_path)
+                return
             self._run_streaming(args, cwd=cwd, env=merged, stdin_path=stdin_path)
             return
 
@@ -1000,6 +1191,9 @@ class BuildContext:
 
         merged = self.merged_env(env)
         if self.current_job_key() is not None:
+            if self.direct_output:
+                self._run_passthrough([self.bash, "-lc", script_body(script)], cwd=cwd, env=merged)
+                return
             self._run_streaming([self.bash, "-lc", script_body(script)], cwd=cwd, env=merged)
             return
 
@@ -1097,6 +1291,80 @@ class BuildContext:
                 self._unregister_process(process)
             if process is not None and process.stdout is not None:
                 process.stdout.close()
+            if stdin is not None:
+                stdin.close()
+
+    def _run_passthrough(
+        self,
+        args: list[str],
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+        stdin_path: Path | None = None,
+    ) -> None:
+        stdin = None
+        process: subprocess.Popen[str] | None = None
+        try:
+            if stdin_path is not None:
+                stdin = stdin_path.open("rb")
+            process = subprocess.Popen(
+                args,
+                cwd=str(cwd or self.root),
+                env=env,
+                stdin=stdin,
+                start_new_session=True,
+            )
+            self._register_process(process, self.current_job_key())
+            terminated_for_restart = False
+            terminate_started_at: float | None = None
+            restart_target: int | None = None
+            cancel_started_at: float | None = None
+            cancel_stage = 0
+
+            while True:
+                control = self.current_job_control()
+                if self.cancelled():
+                    if self.force_cancel_event.is_set():
+                        if cancel_stage < 3:
+                            self._signal_process_group(process, signal.SIGKILL)
+                            cancel_stage = 3
+                    else:
+                        if cancel_stage == 0:
+                            self._signal_process_group(process, signal.SIGINT)
+                            cancel_started_at = time.monotonic()
+                            cancel_stage = 1
+                        elif cancel_started_at is not None and cancel_stage == 1 and time.monotonic() - cancel_started_at >= 3:
+                            self._signal_process_group(process, signal.SIGTERM)
+                            cancel_stage = 2
+                        elif cancel_started_at is not None and cancel_stage == 2 and time.monotonic() - cancel_started_at >= 8:
+                            self._signal_process_group(process, signal.SIGKILL)
+                            cancel_stage = 3
+                else:
+                    requested_slots = control.restart_requested if control is not None else None
+                    if requested_slots is not None:
+                        restart_target = requested_slots
+                        if terminate_started_at is None:
+                            self._signal_process_group(process, signal.SIGTERM)
+                            terminate_started_at = time.monotonic()
+                            terminated_for_restart = True
+                        elif time.monotonic() - terminate_started_at >= 5:
+                            self._signal_process_group(process, signal.SIGKILL)
+
+                if process.poll() is not None:
+                    break
+                time.sleep(0.25)
+
+            returncode = process.wait()
+            if self.cancelled():
+                raise self.cancellation_error()
+            if terminated_for_restart:
+                if control is not None:
+                    control.restart_requested = None
+                raise StepRestart(restart_target or 1)
+            if returncode != 0:
+                raise subprocess.CalledProcessError(returncode, args)
+        finally:
+            if process is not None:
+                self._unregister_process(process)
             if stdin is not None:
                 stdin.close()
 
@@ -1252,34 +1520,15 @@ class BuildContext:
             }
 
     def download_sources(self) -> None:
-        if self.dry_run:
-            self.dry_run_log(f"would create build directory {self.builddir}")
-        else:
-            self.builddir.mkdir(parents=True, exist_ok=True)
-        self.run(["git", "clone", "https://git.savannah.gnu.org/git/gnulib.git", "--depth", "1"], cwd=self.builddir)
-
+        self.ensure_gnulib_checkout()
         for archive in self.source_archives():
-            self.raise_if_cancelled()
-            self.run(
-                [
-                    "curl",
-                    "--retry",
-                    "5",
-                    "--retry-delay",
-                    "2",
-                    "-ZL",
-                    "-o",
-                    archive.output_name,
-                    self.env[archive.url_key],
-                ],
-                cwd=self.builddir,
-            )
+            self.download_source_archive(archive)
 
     def extract_sources(self) -> None:
         if self.dry_run:
             for archive in self.source_archives():
                 destination = self.builddir / archive.destination_dir
-                self.dry_run_log(f"would extract {self.builddir / archive.output_name} -> {destination}")
+                self.dry_run_log(f"would extract {self.source_archive_path(archive)} -> {destination}")
             return
 
         for archive in self.source_archives():
@@ -1287,7 +1536,7 @@ class BuildContext:
             destination = self.builddir / archive.destination_dir
             shutil.rmtree(destination, ignore_errors=True)
 
-            archive_path = self.builddir / archive.output_name
+            archive_path = self.source_archive_path(archive)
             with tarfile.open(archive_path) as tar:
                 first_member = tar.getmembers()[0].name.split("/", 1)[0]
                 tar.extractall(self.builddir)
@@ -1413,15 +1662,21 @@ class BuildContext:
         )
 
     def build(self) -> None:
+        graphs = [
+            create_global_prepare_graph(self),
+            create_host_graph(self),
+        ]
+        for arch in self.archs:
+            arch_state = ArchBuildState(arch=arch, env=self.arch_environment(arch))
+            graphs.append(create_arch_graph(self, arch_state, include_target_libs=not self.no_libs))
+        graphs.append(create_host_cleanup_graph(self))
+
+        self.resolve_rerun_steps(graphs)
         self._install_signal_handlers()
         self.status_panel.start()
         try:
-            self.run_graph(create_global_prepare_graph(self))
-            self.run_graph(create_host_graph(self))
-            for arch in self.archs:
-                arch_state = ArchBuildState(arch=arch, env=self.arch_environment(arch))
-                self.run_graph(create_arch_graph(self, arch_state, include_target_libs=not self.no_libs))
-            self.run_graph(create_host_cleanup_graph(self))
+            for graph in graphs:
+                self.run_graph(graph)
         except BuildCancelled:
             raise
         except BaseException:
@@ -1440,8 +1695,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-a", "--arch", default="x86_64", help="Target architecture list, comma-separated.")
     parser.add_argument("-b", "--build-dir", help="Build directory path.")
     parser.add_argument("-d", "--destination", help="Install destination prefix used inside pkgroot.")
+    parser.add_argument(
+        "--builddir-layout",
+        action="store_true",
+        help="Place host prefixes and target sysroots directly under the build directory instead of build/pkgroot.",
+    )
     parser.add_argument("-j", "--jobs", type=int, help="Parallel build job count.")
     parser.add_argument("-n", "--no-libs", action="store_true", help="Skip additional target library builds.")
+    parser.add_argument(
+        "--direct-output",
+        action="store_true",
+        help="Disable the virtual terminal UI and stream child process output directly to stdout/stderr.",
+    )
+    parser.add_argument(
+        "--rerun-step",
+        action="append",
+        metavar="STEP",
+        help="Ignore the existing stamp for one stamped step. Repeatable; accepts step or graph:step.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print scheduled work without executing build commands.")
     return parser.parse_args(argv)
 

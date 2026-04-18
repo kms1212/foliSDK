@@ -49,48 +49,12 @@ jobs:
           autopoint \
           libssl-dev \
           dpkg-dev
-        wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz
-        wget https://ftp.gnu.org/gnu/automake/automake-1.15.tar.xz
-        tar -xf autoconf-2.69.tar.xz
-        tar -xf automake-1.15.tar.xz
-        cd autoconf-2.69
-        mkdir build
-        cd build
-        ../configure --prefix=/opt/autoconf-2.69
-        make
-        sudo make install
-        cd ../..
-        cd automake-1.15
-        mkdir build
-        cd build
-        ../configure --prefix=/opt/automake-1.15
-        make
-        sudo make install
-        cd ../..
 
     - name: Install Dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
         brew install texinfo wget gnu-getopt autoconf automake libtool tcl-tk help2man
         echo "$(brew --prefix texinfo)/bin" >> $GITHUB_PATH
-        wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz
-        wget https://ftp.gnu.org/gnu/automake/automake-1.15.tar.xz
-        tar -xf autoconf-2.69.tar.xz
-        tar -xf automake-1.15.tar.xz
-        cd autoconf-2.69
-        mkdir build
-        cd build
-        ../configure --prefix=/opt/autoconf-2.69
-        LC_ALL=C make
-        sudo make install
-        cd ../..
-        cd automake-1.15
-        mkdir build
-        cd build
-        ../configure --prefix=/opt/automake-1.15
-        LC_ALL=C make
-        sudo make install
-        cd ../..
 
     - name: Debug - SSH into runner
       if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
@@ -100,7 +64,7 @@ jobs:
 
     - name: Run Build Script
       run: |
-        python3 ./build.sh --arch x86_64
+        python3 build.py --arch x86_64
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4

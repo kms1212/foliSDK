@@ -51,8 +51,6 @@ You'll need a set of GNU tools explicitly installed on your host system:
 brew install texinfo wget gnu-getopt automake libtool tcl-tk help2man
 ```
 
-Additionally, `autoconf-2.69` and `automake-1.15` are required and should be installed to `/opt/autoconf-2.69` and `/opt/automake-1.15` respectively.
-
 ### Linux Requirements
 
 Ensure standard GNU build utilities are installed:
@@ -60,8 +58,6 @@ Ensure standard GNU build utilities are installed:
 ```sh
 sudo apt-get install build-essential bison flex texinfo wget tar tcl help2man autoconf automake autoconf-archive pkg-config autopoint libssl-dev
 ```
-
-Additionally, `autoconf-2.69` and `automake-1.15` are required and should be installed to `/opt/autoconf-2.69` and `/opt/automake-1.15` respectively.
 
 ## Building the SDK
 
