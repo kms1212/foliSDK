@@ -1587,17 +1587,24 @@ class BuildContext:
         target_triplet = f"{arch}-strata-folios"
         arch_prefix = f"{self.destination}/folisdk-{arch}"
         sysroot = f"{arch_prefix}/{target_triplet}/sysroot"
+        build_triplet = self.build_triplet or self.capture(
+            [str(self.root / "gnu-config-strata/config.guess")],
+            env=self.env,
+        )
+        root_path = self.root_path or self.env["PATH"]
+        root_cppflags = self.root_cppflags or self.env["CPPFLAGS"]
+        root_ldflags = self.root_ldflags or self.env["LDFLAGS"]
 
         arch_env: dict[str, str | None] = {
             "ARCH": arch,
             "TARGET_TRIPLET": target_triplet,
             "ARCH_PREFIX": arch_prefix,
             "SYSROOT": sysroot,
-            "BUILD_TRIPLET": self.build_triplet,
-            "ROOT_PATH": self.root_path,
-            "ROOT_CPPFLAGS": self.root_cppflags,
-            "ROOT_LDFLAGS": self.root_ldflags,
-            "PATH": f"{self.pkg_prefix_join(arch_prefix, 'bin')}:{self.root_path}",
+            "BUILD_TRIPLET": build_triplet,
+            "ROOT_PATH": root_path,
+            "ROOT_CPPFLAGS": root_cppflags,
+            "ROOT_LDFLAGS": root_ldflags,
+            "PATH": f"{self.pkg_prefix_join(arch_prefix, 'bin')}:{root_path}",
             "PKG_CONFIG_PATH": "",
             "PKG_CONFIG_LIBDIR": f"{self.pkg_prefix_join(self.host_prefix, 'lib/pkgconfig')}:{self.pkg_prefix_join(self.host_prefix, 'share/pkgconfig')}",
             "PKG_CONFIG_SYSROOT_DIR": self.pkg_prefix_text(self.host_prefix),
@@ -1661,21 +1668,25 @@ class BuildContext:
         )
 
     def build(self) -> None:
-        graphs = [
-            create_global_prepare_graph(self),
-            create_host_graph(self),
-        ]
+        global_graph = create_global_prepare_graph(self)
+        host_graph = create_host_graph(self)
+        arch_builds: list[tuple[ArchBuildState, StepGraph]] = []
         for arch in self.archs:
-            arch_state = ArchBuildState(arch=arch, env=self.arch_environment(arch))
-            graphs.append(create_arch_graph(self, arch_state, include_target_libs=not self.no_libs))
-        graphs.append(create_host_cleanup_graph(self))
+            arch_state = ArchBuildState(arch=arch, env={})
+            arch_builds.append((arch_state, create_arch_graph(self, arch_state, include_target_libs=not self.no_libs)))
+        host_cleanup_graph = create_host_cleanup_graph(self)
+        graphs = [global_graph, host_graph, *(graph for _, graph in arch_builds), host_cleanup_graph]
 
         self.resolve_rerun_steps(graphs)
         self._install_signal_handlers()
         self.status_panel.start()
         try:
-            for graph in graphs:
+            self.run_graph(global_graph)
+            self.run_graph(host_graph)
+            for arch_state, graph in arch_builds:
+                arch_state.env = self.arch_environment(arch_state.arch)
                 self.run_graph(graph)
+            self.run_graph(host_cleanup_graph)
         except BuildCancelled:
             raise
         except BaseException:
