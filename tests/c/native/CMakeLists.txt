@@ -7,6 +7,7 @@ include(UseSIDLC)
 
 # SIDL Compilations
 sidl_generate_c(
+    USER
     HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/sidl"
     SRCS_VAR SIDL_SRCS
     HDRS_VAR SIDL_HDRS

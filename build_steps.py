@@ -1284,12 +1284,12 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 --disable-shared \
                 --disable-gcc-wrapper \
                 CFLAGS="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
-                SIDLC_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/sidl"
+                SIDLC_LIBDIR="$ROOT/sidlc"
             """,
             build_script="""
-            make install-headers DESTDIR="$PKGBUILDDIR/$SYSROOT"
-            make -j"$PARALLEL"
-            make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+            make SIDLC_LIBDIR="$ROOT/sidlc" install-headers DESTDIR="$PKGBUILDDIR/$SYSROOT"
+            make SIDLC_LIBDIR="$ROOT/sidlc" -j"$PARALLEL"
+            make SIDLC_LIBDIR="$ROOT/sidlc" install DESTDIR="$PKGBUILDDIR/$SYSROOT"
             """,
         ),
         package_step(
@@ -1419,12 +1419,12 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                 --disable-gcc-wrapper \
                 --enable-debug \
                 CFLAGS="-I$PKGBUILDDIR/$SYSROOT/usr/include" \
-                SIDLC_LIBDIR="$PKGBUILDDIR/$HOST_PREFIX/lib/sidl"
+                SIDLC_LIBDIR="$ROOT/sidlc"
             """,
             build_script="""
-            make install-headers DESTDIR="$PKGBUILDDIR/$SYSROOT"
-            make -j"$PARALLEL"
-            make install DESTDIR="$PKGBUILDDIR/$SYSROOT"
+            make SIDLC_LIBDIR="$ROOT/sidlc" install-headers DESTDIR="$PKGBUILDDIR/$SYSROOT"
+            make SIDLC_LIBDIR="$ROOT/sidlc" -j"$PARALLEL"
+            make SIDLC_LIBDIR="$ROOT/sidlc" install DESTDIR="$PKGBUILDDIR/$SYSROOT"
             """,
         ),
         RuntimeStep(
@@ -1658,7 +1658,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                     ZSTD_LIB_ZLIB=1 \
                     ZSTD_LIB_LZMA=1 \
                     ZSTD_LIB_LZ4=1
-                make install \
+                make install -j"$PARALLEL" \
                     PREFIX="/usr" \
                     OS=foliOS \
                     TARGET_SYSTEM=foliOS \

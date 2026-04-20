@@ -136,6 +136,7 @@ include(UseSIDLC)
 
 # Automatically compile .sidl to .c/.h bindings
 sidl_generate_c(
+    USER
     SRCS_VAR SIDL_SRCS
     HDRS_VAR SIDL_HDRS
     FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"

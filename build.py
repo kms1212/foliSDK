@@ -1573,7 +1573,7 @@ class BuildContext:
     def capture_host_state(self) -> None:
         self.env["TIC"] = str(self.builddir / "ncurses/progs/tic")
         self.env["SIDLC"] = self.pkg_prefix_join(self.host_prefix, "bin/sidlc")
-        self.env["SIDLC_LIBDIR"] = self.pkg_prefix_join(self.host_prefix, "lib/sidl")
+        self.env["SIDLC_LIBDIR"] = str(self.root / "sidlc")
         self.env.pop("LIBTOOL", None)
         self.env.pop("LIBTOOLIZE", None)
         self.root_path = self.env["PATH"]
