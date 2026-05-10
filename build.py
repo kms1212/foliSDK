@@ -948,8 +948,42 @@ class BuildContext:
                 self.dry_run_log("skip submodule sync (no .gitmodules)")
             return
 
+        if self.dry_run:
+            self.dry_run_log("would initialize missing submodules only (preserve initialized submodule HEADs)")
+            return
+
+        status_text = self.capture(["git", "submodule", "status"], cwd=self.root)
+        if not status_text:
+            return
+
+        missing_paths: list[str] = []
+        for raw_line in status_text.splitlines():
+            line = raw_line.strip()
+            if not line or line[0] != "-":
+                continue
+
+            # git submodule status format:
+            #   <prefix><sha1> <path> (<describe>)
+            parts = line[1:].strip().split()
+            if len(parts) < 2:
+                continue
+            missing_paths.append(parts[1])
+
+        if not missing_paths:
+            self.log_line("submodules already initialized; preserving local submodule HEADs")
+            return
+
         self.run(
-            ["git", "submodule", "update", "--init", "--jobs", str(max(1, self.parallel))],
+            [
+                "git",
+                "submodule",
+                "update",
+                "--init",
+                "--jobs",
+                str(max(1, self.parallel)),
+                "--",
+                *missing_paths,
+            ],
             cwd=self.root,
         )
 
@@ -1633,6 +1667,10 @@ class BuildContext:
         shutil.copy2(
             self.root / "gcc-strata/gcc/ginclude/stdint-gcc.h",
             Path(gcc_builtin_include) / "stdint.h",
+        )
+        shutil.copy2(
+            self.root / "gcc-strata/gcc/ginclude/stdint-gcc.h",
+            Path(gcc_builtin_include) / "stdint-gcc.h",
         )
 
     def set_arch_libtool_env(self, state: ArchBuildState) -> None:

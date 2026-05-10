@@ -1876,22 +1876,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
 def create_host_cleanup_graph(ctx: "BuildContext") -> StepGraph:
     uninstall_names: list[str] = []
     steps: list[BuildStep] = []
-
-    for name in ["pkgconfig", "libtool", "libiconv", "gettext", "gmp", "mpfr", "mpc", "isl"]:
-        step_name = f"uninstall-{name}"
-        uninstall_names.append(step_name)
-        steps.append(
-            ScriptStep(
-                name=step_name,
-                title=f"Uninstall host {name}",
-                cwd=lambda run_ctx, name=name: run_ctx.build_subdir(name),
-                env=_context_env,
-                script="""
-                make uninstall
-                """,
-            )
-        )
-
+    
     steps.append(
         ScriptStep(
             name="cleanup-host",
