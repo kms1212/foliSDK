@@ -198,7 +198,7 @@ void test_malloc_free() {
         if (!blocks[i]) {
             printf("FAIL (malloc failed at block %d, size=%lu)\n",
                 i, (unsigned long)sizes[i]);
-            goto cleanup;
+            goto has_error;
         }
         memset(blocks[i], (unsigned char)(0xA5 ^ i), sizes[i]);
     }
@@ -209,7 +209,7 @@ void test_malloc_free() {
 
         if (ptr[0] != expected || ptr[sizes[i] - 1] != expected) {
             printf("FAIL (memory corrupted at block %d)\n", i);
-            goto cleanup;
+            goto has_error;
         }
     }
 
@@ -230,12 +230,20 @@ void test_malloc_free() {
 
     if (checksum == 0) {
         printf("FAIL (checksum stayed zero)\n");
-        goto cleanup;
+        goto has_error;
     }
 
     printf("PASS (held %lu KB)\n", (unsigned long)(total_bytes / 1024));
 
-cleanup:
+    for (i = 0; i < BLOCK_COUNT; i++) {
+        if (blocks[i]) {
+            free(blocks[i]);
+            blocks[i] = NULL;
+        }
+    }
+    return;
+
+has_error:
     for (i = 0; i < BLOCK_COUNT; i++) {
         if (blocks[i]) {
             free(blocks[i]);

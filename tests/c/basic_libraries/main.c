@@ -379,18 +379,23 @@ void test_compression_zstd() {
     size_t cSize = ZSTD_compress(dst, dstCapacity, src, srcSize, 1);
     if (ZSTD_isError(cSize)) {
         printf("FAIL (Compress)\n");
-        goto cleanup;
+        goto has_error;
     }
 
     // 해제
     size_t dSize = ZSTD_decompress(decompressed, srcSize, dst, cSize);
     if (dSize != srcSize || strcmp(src, (char*)decompressed) != 0) {
         printf("FAIL (Decompress mismatch)\n");
-    } else {
-        printf("PASS\n");
+        goto has_error;
     }
 
-cleanup:
+    printf("PASS\n");
+
+    free(dst);
+    free(decompressed);
+    return;
+
+has_error:
     free(dst);
     free(decompressed);
 }
