@@ -962,14 +962,15 @@ def create_global_prepare_graph(ctx: "BuildContext") -> StepGraph:
 def create_host_graph(ctx: "BuildContext") -> StepGraph:
     steps: list[BuildStep] = [
         package_step(
-            name="pkgconfig",
-            display_name="pkgconfig",
+            name="pkgconf",
+            display_name="pkgconf",
             dependencies=(),
-            cwd=lambda run_ctx: run_ctx.build_subdir("pkgconfig"),
+            cwd=lambda run_ctx: run_ctx.build_subdir("pkgconf"),
             env=_context_env,
             configure_script="""
-            CFLAGS="-Wno-error=int-conversion" \
-            ../pkgconfig-src/configure \
+            CFLAGS="-Dbool=gboolean -Wno-error=int-conversion" \
+            CXXFLAGS="-Dbool=gboolean" \
+            ../pkgconf-src/configure \
                 --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
                 --with-internal-glib \
                 --disable-host-tool \
@@ -1056,7 +1057,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         package_step(
             name="libiconv",
             display_name="host libiconv",
-            dependencies=(build_step_name("pkgconfig"),),
+            dependencies=(build_step_name("pkgconf"),),
             cwd=lambda run_ctx: run_ctx.build_subdir("libiconv"),
             env=_context_env,
             configure_script="""
@@ -1105,6 +1106,8 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
                 cwd=lambda run_ctx, name=name: run_ctx.build_subdir(name),
                 env=_context_env,
                 configure_script=f"""
+                CFLAGS="-std=gnu17" \
+                CXXFLAGS="-std=gnu++17" \
                 ../{name}-src/configure \
                     --prefix="$PKGBUILDDIR/$HOST_PREFIX" \
                     --disable-shared \
@@ -1121,7 +1124,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
         RuntimeStep(
             name="capture-host-state",
             dependencies=(
-                build_step_name("pkgconfig"),
+                build_step_name("pkgconf"),
                 build_step_name("zlib"),
                 build_step_name("ncurses"),
                 build_step_name("cmake"),

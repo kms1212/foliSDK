@@ -880,7 +880,7 @@ class BuildContext:
     def source_archives(self) -> list[SourceArchive]:
         versions = self.env
         return [
-            SourceArchive(f"pkg-config-{versions['PKGCONFIG_VERSION']}.tar.gz", "PKGCONFIG_URL", "PKGCONFIG_SHA256", f"pkg-config-{versions['PKGCONFIG_VERSION']}", "pkgconfig-src"),
+            SourceArchive(f"pkgconf-{versions['PKGCONF_VERSION']}.tar.xz", "PKGCONF_URL", "PKGCONF_SHA256", f"pkgconf-{versions['PKGCONF_VERSION']}", "pkgconf-src"),
             SourceArchive(f"gettext-{versions['GETTEXT_VERSION']}.tar.xz", "GETTEXT_URL", "GETTEXT_SHA256", f"gettext-{versions['GETTEXT_VERSION']}", "gettext-src"),
             SourceArchive(f"autoconf-{versions['AUTOCONF269_VERSION']}.tar.xz", "AUTOCONF269_URL", "AUTOCONF269_SHA256", f"autoconf-{versions['AUTOCONF269_VERSION']}", "autoconf269-src"),
             SourceArchive(f"automake-{versions['AUTOMAKE115_VERSION']}.tar.xz", "AUTOMAKE115_URL", "AUTOMAKE115_SHA256", f"automake-{versions['AUTOMAKE115_VERSION']}", "automake115-src"),
