@@ -153,28 +153,38 @@ folisdk_deactivate
 Current implementation status:
 
 * The active compiler is the C++20 executable in `sidlc/core` and `sidlc/lang`.
-* The only implemented output language is C (`--lang=c`).
-* The only architecture ABI currently registered in `sidlc` is `x86_64` (`--arch=x86_64`), with an 8-byte pointer size and six register argument slots.
+* The compiler uses subcommands: `compile`, `decompile`, and `generate`.
+* `.sidl` is the human-authored source format.
+* `.sif` is the compiled Strata InterFace artifact used for code generation and ABI history extension. It uses the `SIF\0` magic value and stores a binary tree representation of the parsed interface, with 4-byte-aligned strings, mandatory UUID identity/prefix metadata, a root revision hash, and a per-revision hash table; it does not embed the original `.sidl` source text.
+* The only implemented output language is C (`generate --lang=c`).
+* The only architecture ABI currently registered in `sidlc` is `x86_64` (`generate --arch=x86_64`), with an 8-byte pointer size and six register argument slots.
 * Supported SIDL declarations include `interface`, contiguous `abirevision` blocks starting at `0`, `struct`, `bitfield<T>`, `enum<T>`, and `function`.
 * Supported parameter directions are `in`, `out`, and `inout`; supported type forms include built-ins, user-defined types, `ptr<T>`, `array<T>`, and `const`.
 * Built-in C type mappings include `opaque`, `u8/u16/u32/u64`, `s8/s16/s32/s64`, `handle`, and `status`.
-* Interface annotations currently used by the C generator are `@prefix("...")` and `@uuid("namespace-uuid", "name")`. Struct `@align_size(...)` is recognized and emits an aligned struct attribute.
-* `--weak` emits weak client binding symbols.
+* Interface source annotations `@prefix("...")` and `@uuid("namespace-uuid", "name")` are required and are stored as SIF header metadata after compilation. Struct `@align_size(...)` is recognized and emits an aligned struct attribute.
+* `generate --weak` emits weak client binding symbols.
 
 Direct CLI usage looks like:
 
 ```sh
-sidlc --lang=c --arch=x86_64 \
-    --type-header=byte_stream.types.h \
-    --client-header=byte_stream.client.h \
-    --client-src=byte_stream.client.c \
-    byte_stream.sidl
+sidlc compile -o byte_stream.sif byte_stream.sidl
+sidlc compile -b byte_stream.sif -o byte_stream.next.sif byte_stream.next.sidl
+
+sidlc decompile -o byte_stream.sidl byte_stream.sif
+
+sidlc generate \
+    --arch=x86_64 \
+    --lang=c \
+    --mode=client \
+    --header-dir=gen/sidl \
+    --source-path=gen/sidl/byte_stream.c \
+    byte_stream.sif
 ```
 
 The C generator can emit:
 
 * `*.types.h` : shared constants, UUID macros, ABI revision metadata, enums, bitfields, and structs.
-* `*.client.h` / `*.client.c` : client-side `Open`, `Query`, and function wrappers using `StHandle_Query`, `StHandle_Call*`, and `StHandle_CallN`.
+* `*.h` / `*.client.c` : client-side `Open`, `Query`, and function wrappers using `StHandle_Query`, `StHandle_Call*`, and `StHandle_CallN`.
 * `*.server.h` / `*.server.c` : server vtable declarations and `ServerDispatchArgs` dispatch glue.
 * `*.server-client.h` / `*.server-client.c` : client-callable wrappers without the `Open`/`Query` handle binding helpers.
 
