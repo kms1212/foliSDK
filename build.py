@@ -1608,6 +1608,7 @@ class BuildContext:
         self.env["TIC"] = str(self.builddir / "ncurses/progs/tic")
         self.env["SIDLC"] = self.pkg_prefix_join(self.host_prefix, "bin/sidlc")
         self.env["SIDLC_LIBDIR"] = str(self.root / "sidlc")
+        self.env["SMA"] = self.pkg_prefix_join(self.host_prefix, "bin/sma")
         self.env.pop("LIBTOOL", None)
         self.env.pop("LIBTOOLIZE", None)
         self.root_path = self.env["PATH"]

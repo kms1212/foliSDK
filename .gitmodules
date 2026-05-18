@@ -25,3 +25,6 @@
 [submodule "libstrata"]
 	path = libstrata
 	url = https://github.com/kms1212/libstrata.git
+[submodule "sma"]
+	path = sma
+	url = https://github.com/kms1212/sma

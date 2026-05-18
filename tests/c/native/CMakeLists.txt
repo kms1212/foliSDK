@@ -6,12 +6,17 @@ project("test_native" VERSION 0.1.0 LANGUAGES C)
 include(UseSIDLC)
 
 # SIDL Compilations
-sidl_generate_c(
-    USER
+sidlc_compile(
+    OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/sidl"
+    SIFS_VAR SIDL_SIFS
+    FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
+)
+sidlc_generate(
+    CLIENT
     HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/sidl"
     SRCS_VAR SIDL_SRCS
     HDRS_VAR SIDL_HDRS
-    FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
+    SIFS ${SIDL_SIFS}
 )
 
 # Target Configurations

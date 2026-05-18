@@ -1055,6 +1055,21 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
             """,
         ),
         package_step(
+            name="sma",
+            display_name="sma",
+            dependencies=("set-host-cmake-tools",),
+            cwd=lambda run_ctx: run_ctx.build_subdir("sma"),
+            env=_context_env,
+            configure_script="""
+            "$CMAKE" -S../../sma -B. \
+                -DCMAKE_INSTALL_PREFIX="$HOST_PREFIX"
+            """,
+            build_script="""
+            "$CMAKE" --build . --parallel="$PARALLEL"
+            DESTDIR="$PKGBUILDDIR" "$CMAKE" --install .
+            """,
+        ),
+        package_step(
             name="libiconv",
             display_name="host libiconv",
             dependencies=(build_step_name("pkgconf"),),
@@ -1129,6 +1144,7 @@ def create_host_graph(ctx: "BuildContext") -> StepGraph:
                 build_step_name("ncurses"),
                 build_step_name("cmake"),
                 build_step_name("sidlc"),
+                build_step_name("sma"),
                 build_step_name("libiconv"),
                 build_step_name("gettext"),
                 build_step_name("gmp"),

@@ -27,6 +27,7 @@ Unlike generic cross-toolchains, foliSDK intentionally removes historical Unix t
 * **Development Tools**:
 * **CMake Integration**: Includes a custom fork (`cmake-strata`) and built-in modules (e.g., `UseSIDLC.cmake`) tailored to natively support building `foliOS` projects.
 * **sidlc (SIDL Compiler)**: A custom Interface Definition Language compiler. It parses `.sidl` descriptions and generates C type headers, client bindings, server dispatch headers/sources, and combined server-client bindings for foliOS handle-based interfaces.
+* **sma (Strata Module Archiver)**: A host-side tool and CMake module for bundling module kernel/user ELF images into a Strata module archive.
 
 * **Environment Management**: Includes a structured shell activator (`folisdk-env.sh`) for macOS or Linux shells to seamlessly enter the SDK environment without polluting the host environment.
 
@@ -146,73 +147,20 @@ You can now freely call gcc commands (e.g., `x86_64-strata-folios-gcc`) or confi
 folisdk_deactivate
 ```
 
-## SIDL Compiler Status
+## Host Tools
 
-`sidlc` is built as part of the host tools graph and installed by the `folisdk-host` package. The CMake integration module is installed as `UseSIDLC.cmake` under the SDK CMake module directory.
+The host tools are built as part of the `folisdk-host` package.
 
-Current implementation status:
-
-* The active compiler is the C++20 executable in `sidlc/core` and `sidlc/lang`.
-* The compiler uses subcommands: `compile`, `decompile`, and `generate`.
-* `.sidl` is the human-authored source format.
-* `.sif` is the compiled Strata InterFace artifact used for code generation and ABI history extension. It uses the `SIF\0` magic value and stores a binary tree representation of the parsed interface, with 4-byte-aligned strings, mandatory UUID identity/prefix metadata, a root revision hash, and a per-revision hash table; it does not embed the original `.sidl` source text.
-* The only implemented output language is C (`generate --lang=c`).
-* The only architecture ABI currently registered in `sidlc` is `x86_64` (`generate --arch=x86_64`), with an 8-byte pointer size and six register argument slots.
-* Supported SIDL declarations include `interface`, contiguous `abirevision` blocks starting at `0`, `struct`, `bitfield<T>`, `enum<T>`, and `function`.
-* Supported parameter directions are `in`, `out`, and `inout`; supported type forms include built-ins, user-defined types, `ptr<T>`, `array<T>`, and `const`.
-* Built-in C type mappings include `opaque`, `u8/u16/u32/u64`, `s8/s16/s32/s64`, `handle`, and `status`.
-* Interface source annotations `@prefix("...")` and `@uuid("namespace-uuid", "name")` are required and are stored as SIF header metadata after compilation. Struct `@align_size(...)` is recognized and emits an aligned struct attribute.
-* `generate --weak` emits weak client binding symbols.
-
-Direct CLI usage looks like:
-
-```sh
-sidlc compile -o byte_stream.sif byte_stream.sidl
-sidlc compile -b byte_stream.sif -o byte_stream.next.sif byte_stream.next.sidl
-
-sidlc decompile -o byte_stream.sidl byte_stream.sif
-
-sidlc generate \
-    --arch=x86_64 \
-    --lang=c \
-    --mode=client \
-    --header-dir=gen/sidl \
-    --source-path=gen/sidl/byte_stream.c \
-    byte_stream.sif
-```
-
-The C generator can emit:
-
-* `*.types.h` : shared constants, UUID macros, ABI revision metadata, enums, bitfields, and structs.
-* `*.h` / `*.client.c` : client-side `Open`, `Query`, and function wrappers using `StHandle_Query`, `StHandle_Call*`, and `StHandle_CallN`.
-* `*.server.h` / `*.server.c` : server vtable declarations and `ServerDispatchArgs` dispatch glue.
-* `*.server-client.h` / `*.server-client.c` : client-callable wrappers without the `Open`/`Query` handle binding helpers.
+* `sidlc` compiles SIDL source into `.sif` interface artifacts and generates language bindings. See [`sidlc/README.md`](sidlc/README.md).
+* `sma` packages module kernel/user ELF images and interface metadata into `.sma` Strata module archives. See [`sma/README.md`](sma/README.md).
 
 ## Developing foliOS Applications
 
 With the SDK activated, you can write native applications using the modern `foliOS` ABI. The toolchain handles `.dl` (dynamic) and `.sl` (static) links seamlessly.
 
-**Example `CMakeLists.txt` for a foliOS app:**
-
-```cmake
-cmake_minimum_required(VERSION 3.20)
-project(HelloWorld C)
-
-# Use the built-in SIDL macros from sidlc
-include(UseSIDLC)
-
-# Automatically compile .sidl to .c/.h bindings
-sidl_generate_c(
-    CLIENT
-    HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/sidl"
-    SRCS_VAR SIDL_SRCS
-    HDRS_VAR SIDL_HDRS
-    FILES "${SIDLC_INTERFACE_DIRECTORY}/byte_stream.sidl"
-)
-
-add_executable(hello_app main.c ${SIDL_SRCS} ${SIDL_HDRS})
-target_include_directories(hello_app PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/sidl")
-```
+Use the SDK CMake toolchain files under `folisdk/cmake` when configuring
+native projects. For interface binding generation, see
+[`sidlc/README.md`](sidlc/README.md).
 
 ## Manual Usage (Linux / Raw extract)
 
