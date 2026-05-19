@@ -1754,6 +1754,7 @@ def create_arch_graph(ctx: "BuildContext", state: ArchBuildState, include_target
                     --prefix="/usr" \
                     --with-libtool \
                     --with-pkg-config-libdir="/usr/lib/pkgconfig" \
+                    --with-strip-program="$STRIP" \
                     --with-tic-path="$TIC" \
                     --with-build-cc="/usr/bin/cc" \
                     --without-ada \
